@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<launch>
+    <!--node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
+        <param name="video_device" value="/dev/video0" />
+        <param name="image_width" value="640" />
+        <param name="image_height" value="480" />
+        <param name="pixel_format" value="yuyv" />
+        <param name="camera_frame_id" value="usb_cam" />
+        <param name="io_method" value="mmap"/>
+    </node-->
+
+    <node pkg="motion_detection" type="motion_detection" name="motion_detection" output="screen" respawn="false">
+    	<!--remap from="~input_image" to="/usb_cam/image_raw"/-->
+        <remap from="~input_image" to="/tower_cam3d/rgb/image_raw"/>        
+        <!--remap from="~input_image" to="/tower_cam3d/rgb/image_rect_color"/-->
+        <param name="x_trans" type="double" value="0.0" />
+        <param name="y_trans" type="double" value="0.0" />
+        <param name="z_trans" type="double" value="-0.01" />
+        <param name="roll"    type="double" value="0.0" />
+        <param name="pitch"   type="double" value="0.0" />
+        <param name="yaw"     type="double" value="0.0" />
+    </node>
+
+    <node name="expected_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/expected_flow_image"/>
+    </node>
+
+    <node name="optical_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/optical_flow_image"/>
+    </node>
+
+    <!--node name="image_raw" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/tower_cam3d/rgb/image_raw"/>
+    </node-->
+
+    <!--node name="image_rect_color" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/tower_cam3d/rgb/image_rect_color"/>
+    </node-->
+</launch>

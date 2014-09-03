@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package>
+  <name>motion_detection</name>
+  <version>0.0.0</version>
+  <description>Motion detection using optical flow with egomotion compensation</description>
+  <maintainer email="santosh.thoduka@gmail.com">Santosh Thoduka</maintainer>
+
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>pcl</build_depend>
+  <build_depend>pcl_ros</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>image_transport</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>tf</build_depend>
+  <build_depend>visualization_msgs</build_depend>
+
+  <run_depend>visualization_msgs</run_depend>
+
+</package>
