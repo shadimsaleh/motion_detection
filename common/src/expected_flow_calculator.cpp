@@ -27,42 +27,63 @@ void ExpectedFlowCalculator::setCameraParameters(cv::Mat camera_matrix, cv::Mat 
     this->camera_distortion = distortion.clone();
 }
 
-std::vector<std::vector<double> > ExpectedFlowCalculator::calculateExpectedFlow(PointCloud frame, 
+void ExpectedFlowCalculator::calculateExpectedFlow(PointCloud frame, 
                                                                           std::vector<double> odom,    
                                                                           cv::Mat &frame_image,
-                                                                          cv::Mat &projected_image2)
+                                                                          cv::Mat &projected_image2,
+                                                                          cv::Mat &expected_flow_vectors)
 {
 //   Eigen::Transform<Scalar, 3, Eigen::Affine> t;
 //   pcl::getTransformation(0.0, 0.0, 0.5, 0.0, 0.0, 0.0, t);
 
     pcl::PointCloud<PointT>::Ptr frame1(new pcl::PointCloud<PointT>);
-    pcl::PointCloud<PointT>::Ptr frame2(new pcl::PointCloud<PointT>);
+ //   pcl::PointCloud<PointT>::Ptr frame2(new pcl::PointCloud<PointT>);
 
-    std::cout << "converting to pointcloud" << std::endl;
+//    std::cout << "converting to pointcloud" << std::endl;
     pcl::fromPCLPointCloud2(frame, *frame1);
-    std::cout << "done converting to pointcloud" << std::endl;
+//    std::cout << "done converting to pointcloud" << std::endl;
 
-    Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
-    transform_2.translation() << 0.0, 0.0, 0.0;
-    std::cout << "transforming pointcloud" << std::endl;
-    pcl::transformPointCloud (*frame1, *frame2, transform_2);
-    std::cout << "done transforming pointcloud" << std::endl;
+  //  pcl::copyPointCloud(*frame1, *frame2);
+
+    /*
+    for (int i = 0; i < frame1->points.size(); i++)
+    {
+        std::cout << frame1->points[i].x << ", " << frame1->points[i].y << ", " << frame1->points[i].z << std::endl;
+    }
+    */
+
+//    Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+//    transform_2.translation() << 0.0, 0.0, 0.0;
+//    std::cout << "transforming pointcloud" << std::endl;
+//    pcl::transformPointCloud (*frame1, *frame2, transform_2);
+//    std::cout << "done transforming pointcloud" << std::endl;
     
+//    std::cout << "frame 1 pc: " << frame1->points.size() << std::endl;
     cv::Mat projected_image1;
-    cv::Mat cv_frame1 = getOpenCVPoints(frame1);
-    std::cout << "frame 1 size: " << cv_frame1.cols << ", " << cv_frame1.rows << std::endl;
-    std::vector<cv::Point2f> projected_points1(cv_frame1.cols * cv_frame1.rows);
-    cv::projectPoints(cv_frame1, camera_rotation, camera_translation, camera_matrix, camera_distortion, projected_points1);
+    std::vector<cv::Point3f> objectPoints = getOpenCVPoints(frame1);
+    //cv::Mat cv_frame1 = getOpenCVPoints(frame1);
+ //   std::cout << "frame 1 size: " << objectPoints.size() << std::endl;
+//    std::vector<cv::Point2f> projected_points1(cv_frame1.cols * cv_frame1.rows);
+    std::vector<cv::Point2f> projected_points1(objectPoints.size());
+    cv::projectPoints(objectPoints, camera_rotation, camera_translation, camera_matrix, camera_distortion, projected_points1);
+
+    /*
+    for (int i = 0; i < 1000; i++)
+    {
+        std::cout << projected_points1[i].x << ", " << projected_points1[i].y << std::endl;
+    }
+
+    */
     projected_image1 = cv::Mat(projected_points1);
 
-    cv::Mat cv_frame2 = getOpenCVPoints(frame2);
-    std::cout << "frame 2 size: " << cv_frame2.cols << ", " << cv_frame2.rows << std::endl;
-    std::vector<cv::Point2f> projected_points2(cv_frame2.cols * cv_frame2.rows);
+//    cv::Mat cv_frame2 = getOpenCVPoints(frame2);
+//    std::cout << "frame 2 size: " << cv_frame2.cols << ", " << cv_frame2.rows << std::endl;
+    std::vector<cv::Point2f> projected_points2(objectPoints.size());
     double translation[3] = {odom[0], odom[1], odom[2]};
     cv::Mat camera_translation2 = cv::Mat(1, 3, CV_64F, translation);
     double rotation[3] = {odom[3], odom[4], odom[5]};
     cv::Mat camera_rotation2 = cv::Mat(1, 3, CV_64F, rotation);
-    cv::projectPoints(cv_frame2, camera_rotation2, camera_translation2, camera_matrix, camera_distortion, projected_points2);
+    cv::projectPoints(objectPoints, camera_rotation2, camera_translation2, camera_matrix, camera_distortion, projected_points2);
     projected_image2 = cv::Mat(projected_points2);
 
 
@@ -86,13 +107,19 @@ std::vector<std::vector<double> > ExpectedFlowCalculator::calculateExpectedFlow(
         cv::Point2f start_point(projected_points1[i]);
         cv::Point2f end_point(projected_points2[i]);        
 
-        if ((int)start_point.x % 40 != 0 || (int)start_point.y % 40 != 0)
+        if ((int)start_point.x % 20 != 0 || (int)start_point.y % 20 != 0)
             continue;
-
+        cv::Vec4d &elem = expected_flow_vectors.at<cv::Vec4d> ((int)start_point.x, (int)start_point.y);
+        float x_diff = end_point.x - start_point.x;
+        float y_diff = end_point.y - start_point.y;
+        elem[0] = start_point.x;
+        elem[1] = start_point.y;
+        elem[2] = atan2(y_diff, x_diff);
+        elem[3] = sqrt(x_diff*x_diff + y_diff*y_diff);
         if (i < 1000)
         {
             //std::cout << "start point: " << start_point.x << ", " << start_point.y << "    :    end point: " << end_point.x << ", " << end_point.y << std::endl;
-            std::cout << "start point: " << projected_points1[i].x << ", " << projected_points1[i].y << "    :    end point: " << projected_points2[i].x << ", " << projected_points2[i].y << std::endl;
+       //     std::cout << "start point: " << projected_points1[i].x << ", " << projected_points1[i].y << "    :    end point: " << projected_points2[i].x << ", " << projected_points2[i].y << std::endl;
         }
 
         cv::line(frame_image, start_point, end_point, CV_RGB(255,0,0), 1, CV_AA, 0);        
@@ -159,29 +186,35 @@ std::vector<std::vector<double> > ExpectedFlowCalculator::calculateExpectedFlow(
     pcl::io::savePCDFileASCII("one.pcd", frame1);
     pcl::io::savePCDFileASCII("two.pcd", projected_frame2);
     */
-    std::vector<std::vector<double> > toreturn;
-    return toreturn;
 }
 
 
-cv::Mat ExpectedFlowCalculator::getOpenCVPoints(pcl::PointCloud<PointT>::Ptr frame)
+std::vector<cv::Point3f> ExpectedFlowCalculator::getOpenCVPoints(pcl::PointCloud<PointT>::Ptr frame)
 {
     std::vector<cv::Point3f> points;
+    //int m = 0;
 
     for (int i = 0; i < frame->points.size(); i++)
     {
         if (!pcl_isfinite (frame->points[i].x) || 
             !pcl_isfinite (frame->points[i].y) || 
             !pcl_isfinite (frame->points[i].z))
-           continue;
-
+        {
+            //std::cout << pcl_isfinite (frame->points[i].x) << ", " << pcl_isfinite (frame->points[i].y) << ", " << pcl_isfinite (frame->points[i].z) << std::endl;
+            continue;
+        }
+       // m++;
         cv::Point3f p;
         p.x = frame->points[i].x;
         p.y = frame->points[i].y;
         p.z = frame->points[i].z;
+        //if (m < 100)
+        //    std::cout << p.x << ", " << p.y << ", " << p.z << std::endl;
         points.push_back(p);
     }
-    cv::Mat m_points = cv::Mat(points);
-    return m_points;
+//    std::cout << "points size: " << points.size() << std::endl;
+    return points;
+    //cv::Mat m_points = cv::Mat(points);
+    //return m_points;
 }
 

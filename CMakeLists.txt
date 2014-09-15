@@ -45,6 +45,9 @@ add_executable(motion_detection
   ros/src/motion_detection_node.cpp
   common/src/expected_flow_calculator.cpp
   common/src/optical_flow_calculator.cpp
+  common/src/flow_clusterer.cpp
+  common/src/flow_difference_calculator.cpp
+  common/src/VarFlow.cpp
 )
 target_link_libraries(motion_detection
   ${catkin_LIBRARIES}

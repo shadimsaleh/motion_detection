@@ -4,6 +4,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <motion_detection/expected_flow_calculator.h>
 #include <motion_detection/optical_flow_calculator.h>
+#include <motion_detection/flow_clusterer.h>
+#include <motion_detection/flow_difference_calculator.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/conversions.h>
 #include <pcl/PCLPointCloud2.h>
@@ -25,10 +27,10 @@ class MotionDetectionNode
             image2_publisher = it_.advertise("image2", 1);
             expected_flow_publisher = it_.advertise("expected_flow_image", 1);
 
-            cloud_subscriber = nh_.subscribe("/tower_cam3d/depth_registered/points", 1, &MotionDetectionNode::cloudCallback, this);
+            cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
             image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
 
-            camera_info_subscriber = nh_.subscribe("/tower_cam3d/rgb/camera_info", 1, &MotionDetectionNode::cameraCallback, this);
+            camera_info_subscriber = nh_.subscribe("input_camerainfo", 1, &MotionDetectionNode::cameraCallback, this);
         }
 
         void runExpectedFlow()
@@ -39,7 +41,7 @@ class MotionDetectionNode
                ros::spinOnce();
            }
 
-           ROS_INFO("received cloud");
+           //ROS_INFO("received cloud");
 
            cv_bridge::CvImagePtr cv_image;
 
@@ -65,14 +67,19 @@ class MotionDetectionNode
            pcl::PCLPointCloud2 pc2;
            pcl_conversions::toPCL(cloud, pc2);
 
-           ROS_INFO("getting expected flow");
-           efc.calculateExpectedFlow(pc2, odom, cv_image->image, projected_image);
+          // ROS_INFO("cloud width %i", cloud.width);
+         //  ROS_INFO("cloud height %i", cloud.height);
+
+         //  ROS_INFO("getting expected flow");
+           cv::Mat expected_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
+           efc.calculateExpectedFlow(pc2, odom, cv_image->image, projected_image, expected_flow_vectors);
+
 
            cv_bridge::CvImage expected_flow_image_msg;
            expected_flow_image_msg.encoding = sensor_msgs::image_encodings::BGR8;
            expected_flow_image_msg.image = cv_image->image;
            expected_flow_publisher.publish(expected_flow_image_msg.toImageMsg());
-           ROS_INFO("got expected flow");
+          // ROS_INFO("got expected flow");
            
            
            cv_bridge::CvImagePtr cv_image1;
@@ -83,7 +90,30 @@ class MotionDetectionNode
 
            cv::Mat optical_flow_image;
 
-           ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_image);
+           cv::Mat optical_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
+           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
+           //std::cout << "test : " << optical_flow_vectors.at<cv::Vec4d>(160, 160) << std::endl;
+           //std::cout << "test : " << optical_flow_vectors.at<cv::Vec4d>(140, 120) << std::endl;
+          // std::cout << "-----------------------" << std::endl;
+           //std::cout << optical_flow_vectors << std::endl;
+         //  std::cout << "-----------------------" << std::endl;
+           cv::Mat centers;
+           if (num_vectors > 0)
+           {
+               std::cout <<"num_vectors: " << num_vectors << std::endl;
+               centers = fc.clusterFlowVectors(optical_flow_vectors);          
+           //    std::cout << centers << std::endl;
+               for (int i = 0; i < centers.rows; i++)
+               {                 
+                   //std::cout << centers.at<float>(i,0) << ", " << centers.at<float>(i,1) << ", " << centers.at<float>(i,2) << std::endl; 
+                   cv::circle(optical_flow_image, cv::Point((int)centers.at<float>(i,0), (int)centers.at<float>(i,1)), 5.0, cv::Scalar(255,0,0), -1, 8);
+               }
+           }
+           
+           cv::Mat difference_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
+           fdc.calculateFlowDifference(optical_flow_vectors, expected_flow_vectors, difference_vectors);
+
+           //ofc.varFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
            
            cv_bridge::CvImage optical_flow_image_msg;
            optical_flow_image_msg.encoding = sensor_msgs::image_encodings::BGR8;
@@ -91,6 +121,8 @@ class MotionDetectionNode
            image_publisher.publish(optical_flow_image_msg.toImageMsg());
            image1_publisher.publish(raw_image1);
            image2_publisher.publish(raw_image2);
+
+          
 
 
            cloud_received = false;
@@ -104,7 +136,7 @@ class MotionDetectionNode
                ros::spinOnce();
            }
 
-           ROS_INFO("received image");
+           //ROS_INFO("received image");
            
 
            cv_bridge::CvImagePtr cv_image1;
@@ -115,7 +147,9 @@ class MotionDetectionNode
 
            cv::Mat optical_flow_image;
 
-           ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_image);
+           //ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_image);
+           cv::Mat optical_flow_vectors = cv::Mat::zeros(cv::Size(cv_image1->image.cols, cv_image1->image.rows), CV_32FC4);
+           ofc.varFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
            
            cv_bridge::CvImage optical_flow_image_msg;
            optical_flow_image_msg.encoding = sensor_msgs::image_encodings::BGR8;
@@ -151,11 +185,11 @@ class MotionDetectionNode
         void cameraCallback(const sensor_msgs::CameraInfo &camera_info)
         {
             double matrix[3][3] = { {570.3422241210938, 0.0, 319.5}, {0.0, 570.3422241210938, 239.5}, {0.0, 0.0, 1.0} };
-            //std::copy(&camera_info.K[0], &camera_info.K[0] + 9, &matrix[0][0]);
+            std::copy(&camera_info.K[0], &camera_info.K[0] + 9, &matrix[0][0]);
             cv::Mat camera_matrix = cv::Mat(3, 3, CV_64F, matrix);
 
             double rotation[3][3] = { {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0} };
-            //std::copy(&camera_info.R[0], &camera_info.R[0] + 9, &rotation[0][0]);
+            std::copy(&camera_info.R[0], &camera_info.R[0] + 9, &rotation[0][0]);
             cv::Mat camera_rotation_matrix = cv::Mat(3, 3, CV_64F, rotation);
             cv::Mat camera_rotation_vector;
             cv::Rodrigues(camera_rotation_matrix, camera_rotation_vector);
@@ -164,7 +198,7 @@ class MotionDetectionNode
             cv::Mat camera_translation = cv::Mat(1, 3, CV_64F, translation);
             
             double distortion[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
-            //std::copy(&camera_info.D[0], &camera_info.D[0] + 5, &distortion[0]);
+            std::copy(&camera_info.D[0], &camera_info.D[0] + 5, &distortion[0]);
             cv::Mat camera_distortion = cv::Mat(1, 5, CV_64F, distortion);
 
             efc.setCameraParameters(camera_matrix, camera_translation, camera_rotation_vector, camera_distortion);
@@ -191,6 +225,8 @@ class MotionDetectionNode
         sensor_msgs::ImageConstPtr raw_image2;
         OpticalFlowCalculator ofc;
         ExpectedFlowCalculator efc;
+        FlowClusterer fc;
+        FlowDifferenceCalculator fdc;
 
 };
 int main(int argc, char **argv)
@@ -204,7 +240,7 @@ int main(int argc, char **argv)
     MotionDetectionNode mdn(n); 
     while(ros::ok())
     {
-    //    mdn.runOpticalFlow();
+   //     mdn.runOpticalFlow();
         mdn.runExpectedFlow();
     }
 

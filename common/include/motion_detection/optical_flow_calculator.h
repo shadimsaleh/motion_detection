@@ -9,7 +9,11 @@ class OpticalFlowCalculator
         OpticalFlowCalculator();
         virtual ~OpticalFlowCalculator();
         
-        std::vector<std::vector<double> > calculateOpticalFlow(cv::Mat image1, cv::Mat image2, cv::Mat &optical_flow_image);   
+        int calculateOpticalFlow(cv::Mat image1, cv::Mat image2, cv::Mat &optical_flow_image, cv::Mat &optical_flow_vectors);
+
+        void varFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow, cv::Mat &optical_flow_vectors);
+
+        void drawMotionField(IplImage* imgU, IplImage* imgV, IplImage* imgMotion, int xSpace, int ySpace, float cutoff, int multiplier, CvScalar color);
 };
 
 #endif

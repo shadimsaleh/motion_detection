@@ -18,7 +18,7 @@ class ExpectedFlowCalculator
         
         virtual ~ExpectedFlowCalculator();
 
-        std::vector<std::vector<double> > calculateExpectedFlow(PointCloud frame, std::vector<double> odom, cv::Mat &frame_image, cv::Mat &projected_image);        
+        void calculateExpectedFlow(PointCloud frame, std::vector<double> odom, cv::Mat &frame_image, cv::Mat &projected_image, cv::Mat &optical_flow_vectors);
 
         void setCameraParameters(cv::Mat camera_matrix, cv::Mat translation, cv::Mat rotation, cv::Mat distortion);
 
@@ -34,7 +34,7 @@ class ExpectedFlowCalculator
 
     private:
 
-        cv::Mat getOpenCVPoints(pcl::PointCloud<PointT>::Ptr frame);
+        std::vector<cv::Point3f> getOpenCVPoints(pcl::PointCloud<PointT>::Ptr frame);
 
 };
 
