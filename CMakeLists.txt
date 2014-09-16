@@ -47,7 +47,9 @@ add_executable(motion_detection
   common/src/optical_flow_calculator.cpp
   common/src/flow_clusterer.cpp
   common/src/flow_difference_calculator.cpp
+  common/src/optical_flow_visualizer.cpp
   common/src/VarFlow.cpp
+  common/src/slic.cpp
 )
 target_link_libraries(motion_detection
   ${catkin_LIBRARIES}

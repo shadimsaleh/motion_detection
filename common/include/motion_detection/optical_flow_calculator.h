@@ -9,7 +9,9 @@ class OpticalFlowCalculator
         OpticalFlowCalculator();
         virtual ~OpticalFlowCalculator();
         
-        int calculateOpticalFlow(cv::Mat image1, cv::Mat image2, cv::Mat &optical_flow_image, cv::Mat &optical_flow_vectors);
+        int calculateOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step);
+
+        int superPixelFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_image, cv::Mat &optical_flow_vectors);
 
         void varFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow, cv::Mat &optical_flow_vectors);
 

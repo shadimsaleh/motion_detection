@@ -9,6 +9,6 @@ class FlowDifferenceCalculator
         FlowDifferenceCalculator();
         virtual ~FlowDifferenceCalculator();
 
-        void calculateFlowDifference(const cv::Mat &first, const cv::Mat &second, cv::Mat &diff);
+        void calculateFlowDifference(const cv::Mat &first, const cv::Mat &second, cv::Mat &diff, int pixel_step);
 };
 #endif
