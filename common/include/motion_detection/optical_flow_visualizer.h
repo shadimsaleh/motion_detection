@@ -9,7 +9,7 @@ class OpticalFlowVisualizer
         OpticalFlowVisualizer();
         virtual ~OpticalFlowVisualizer();
 
-        void showOpticalFlowVectors(const cv::Mat &original, cv::Mat &optical_flow_image, const cv::Mat &optical_flow_vectors, int pixel_step);        
+        void showOpticalFlowVectors(const cv::Mat &original, cv::Mat &optical_flow_image, const cv::Mat &optical_flow_vectors, int pixel_step, cv::Scalar colour);        
 
 };
 #endif

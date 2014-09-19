@@ -39,6 +39,10 @@ void ExpectedFlowCalculator::calculateExpectedFlow(PointCloud frame,
 
     cv::Mat projected_image1;
     std::vector<cv::Point3f> objectPoints = getOpenCVPoints(frame1);
+    if (objectPoints.empty())
+    {
+        return;
+    }
 
     std::vector<cv::Point2f> projected_points1(objectPoints.size());
 
@@ -62,13 +66,16 @@ void ExpectedFlowCalculator::calculateExpectedFlow(PointCloud frame,
 
         if ((int)start_point.x % pixel_step != 0 || (int)start_point.y % pixel_step != 0)
             continue;
-        cv::Vec4d &elem = expected_flow_vectors.at<cv::Vec4d> ((int)start_point.x, (int)start_point.y);
+        cv::Vec4d &elem = expected_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
         float x_diff = end_point.x - start_point.x;
         float y_diff = end_point.y - start_point.y;
         elem[0] = start_point.x;
         elem[1] = start_point.y;
-        elem[2] = atan2(y_diff, x_diff);
-        elem[3] = sqrt(x_diff*x_diff + y_diff*y_diff);
+        elem[2] = x_diff;
+        elem[3] = y_diff;
+        
+      //  elem[2] = atan2(y_diff, x_diff);
+      //  elem[3] = sqrt(x_diff*x_diff + y_diff*y_diff);
     }
 }
 
@@ -77,7 +84,6 @@ std::vector<cv::Point3f> ExpectedFlowCalculator::getOpenCVPoints(pcl::PointCloud
 {
     std::vector<cv::Point3f> points;
     //int m = 0;
-
     for (int i = 0; i < frame->points.size(); i++)
     {
         if (!pcl_isfinite (frame->points[i].x) || 

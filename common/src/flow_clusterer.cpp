@@ -1,4 +1,5 @@
 #include <motion_detection/flow_clusterer.h>
+#include <motion_detection/vector_cluster.h>
 #include <opencv2/flann/flann_base.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
@@ -52,6 +53,7 @@ cv::Mat FlowClusterer::clusterFlowVectors(const cv::Mat &flow_vectors)
    // std::cout << "finished clustering " << std::endl;
 
     centers = centers.rowRange(cv::Range(0, num_clusters));
+    /*
     std::cout << "centers: " << std::endl;
     for(int i = 0; i < num_clusters; i++)
     {
@@ -62,5 +64,83 @@ cv::Mat FlowClusterer::clusterFlowVectors(const cv::Mat &flow_vectors)
         std::cout << std::endl;
     }
     std::cout <<"num_clusters: " << num_clusters << std::endl;
+    */
     return centers;
 }
+
+std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
+{
+    std::vector<VectorCluster> clusters;
+    for (int i = 0; i < flow_vectors.rows; i = i + pixel_step)
+    {
+        for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
+        {
+            cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
+            if (vec[2] > 0.0 || vec[3] > 0.0)
+            {
+                bool added = false;
+                for (int k = 0; k < clusters.size(); k++)
+                {
+                    if (clusters.at(k).getClosestDistance(vec) < distance_threshold && 
+                        clusters.at(k).getClosestOrientation(vec) < angular_threshold)
+                    {
+                        clusters.at(k).addVector(vec);
+                        added = true;
+                    }
+                }
+                if (!added)
+                {
+                    VectorCluster vc;
+                    vc.addVector(vec);
+                    clusters.push_back(vc);
+                }
+            }
+        }
+    }
+    std::vector<cv::Point2f> centroids;
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        centroids.push_back(clusters.at(i).getCentroid());
+    }
+    return centroids;
+}
+
+std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
+{
+    std::vector<VectorCluster> clusters;
+    for (int i = 0; i < flow_vectors.rows; i = i + pixel_step)
+    {
+        for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
+        {
+            cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
+            if (vec[2] > 0.0 || vec[3] > 0.0)
+            {
+                bool added = false;
+                for (int k = 0; k < clusters.size(); k++)
+                {
+                    if (clusters.at(k).getClosestDistance(vec) < distance_threshold && 
+                        clusters.at(k).getClosestOrientation(vec) < angular_threshold)
+                    {
+                        clusters.at(k).addVector(vec);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added)
+                {
+                    VectorCluster vc;
+                    vc.addVector(vec);
+                    clusters.push_back(vc);
+                }
+            }
+        }
+    }
+    std::vector<cv::Mat> mat_clusters;    
+    for (int i = 0; i < clusters.size(); i++)
+    {
+//        cv::Mat cluster_points(clusters.at(i).getCluster(), true);
+        mat_clusters.push_back(cv::Mat(clusters.at(i).getCluster()).reshape(1));
+    }
+    return mat_clusters;
+}
+

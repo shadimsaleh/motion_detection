@@ -8,12 +8,15 @@
 
         <param name="x_trans" type="double" value="0.0" />
         <param name="y_trans" type="double" value="0.0" />
-        <param name="z_trans" type="double" value="0.1" />
+        <param name="z_trans" type="double" value="0.0" />
         <param name="roll"    type="double" value="0.0" />
         <param name="pitch"   type="double" value="0.0" />
         <param name="yaw"     type="double" value="0.0" />
 
         <param name="pixel_step" type="int" value="10" />
+        <param name="distance_threshold" type="double" value="50.0" />
+        <param name="angular_threshold" type="double" value="0.26" />
+
     </node>
 
     <node name="expected_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
@@ -26,5 +29,9 @@
 
     <node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/compensated_flow_image"/>
+    </node>
+
+    <node name="clustered_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/clustered_flow_image"/>
     </node>
 </launch>
