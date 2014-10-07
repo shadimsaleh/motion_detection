@@ -139,7 +139,10 @@ std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int
     for (int i = 0; i < clusters.size(); i++)
     {
 //        cv::Mat cluster_points(clusters.at(i).getCluster(), true);
-        mat_clusters.push_back(cv::Mat(clusters.at(i).getCluster()).reshape(1));
+        if (clusters.at(i).size() > 5)
+        {
+            mat_clusters.push_back(cv::Mat(clusters.at(i).getCluster()).reshape(1));
+        }
     }
     return mat_clusters;
 }

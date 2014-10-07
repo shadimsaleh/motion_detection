@@ -7,6 +7,7 @@
 #include <motion_detection/flow_clusterer.h>
 #include <motion_detection/flow_difference_calculator.h>
 #include <motion_detection/optical_flow_visualizer.h>
+#include <motion_detection/background_subtractor.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/conversions.h>
 #include <pcl/PCLPointCloud2.h>
@@ -26,12 +27,14 @@ class MotionDetectionNode
             image_received = false;
             first_image_received = false;
             camera_params_set = false;
+            first_run = true;
             image_publisher = it_.advertise("optical_flow_image", 1);
             image1_publisher = it_.advertise("image1", 1);
             image2_publisher = it_.advertise("image2", 1);
             expected_flow_publisher = it_.advertise("expected_flow_image", 1);
             compensated_flow_publisher = it_.advertise("compensated_flow_image", 1);
             clustered_flow_publisher = it_.advertise("clustered_flow_image", 1);
+            background_subtraction_publisher = it_.advertise("background_subtraction_image", 1);
 
             cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
             image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
@@ -40,7 +43,7 @@ class MotionDetectionNode
         }
 
         void runExpectedFlow()
-        {
+        {           
            while (!cloud_received || !image_received || !camera_params_set)
            {
                ros::Rate(100).sleep();
@@ -60,6 +63,13 @@ class MotionDetectionNode
 
            cv_image = cv_bridge::toCvCopy(raw_image2, "rgb8");
            cv::Mat projected_image;
+
+           if(first_run)
+           {
+               cv::Mat contour_image;
+               bs.getMotionContours(cv_image1->image, contour_image); 
+               first_run = false;
+           }
 
            std::vector<double> odom;
            double x_trans, y_trans, z_trans, roll, pitch, yaw;
@@ -184,6 +194,14 @@ class MotionDetectionNode
            image_publisher.publish(optical_flow_image_msg.toImageMsg());
            image1_publisher.publish(raw_image1);
            image2_publisher.publish(raw_image2);
+
+
+           cv::Mat bs_contours;
+           bs.getMotionContours(cv_image2->image, bs_contours);
+           cv_bridge::CvImage bs_contours_msg;
+           bs_contours_msg.encoding = sensor_msgs::image_encodings::RGB8;
+           bs_contours_msg.image = bs_contours;
+           background_subtraction_publisher.publish(bs_contours_msg.toImageMsg());
         }
 
         void runOpticalFlow()
@@ -275,10 +293,12 @@ class MotionDetectionNode
         image_transport::Publisher expected_flow_publisher;
         image_transport::Publisher compensated_flow_publisher;
         image_transport::Publisher clustered_flow_publisher;
+        image_transport::Publisher background_subtraction_publisher;
         bool cloud_received;
         bool image_received;
         bool first_image_received;
         bool camera_params_set;
+        bool first_run;
 
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::ImageConstPtr raw_image1;
@@ -288,6 +308,7 @@ class MotionDetectionNode
         FlowClusterer fc;
         FlowDifferenceCalculator fdc;
         OpticalFlowVisualizer ofv;
+        BackgroundSubtractor bs;
 
         cv::RNG rng;
 
