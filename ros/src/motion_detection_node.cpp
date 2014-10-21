@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
+#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <motion_detection/expected_flow_calculator.h>
@@ -25,6 +26,7 @@ class MotionDetectionNode
         {
             cloud_received = false;
             image_received = false;
+            odom_received = false;
             first_image_received = false;
             camera_params_set = false;
             first_run = true;
@@ -38,13 +40,14 @@ class MotionDetectionNode
 
             cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
             image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
+            odom_subscriber = nh_.subscribe("/odom", 1, &MotionDetectionNode::odomCallback, this);
 
             camera_info_subscriber = nh_.subscribe("input_camerainfo", 1, &MotionDetectionNode::cameraCallback, this);
         }
 
         void runExpectedFlow()
         {           
-           while (!cloud_received || !image_received || !camera_params_set)
+           while (!cloud_received || !image_received || !camera_params_set || !odom_received)
            {
                ros::Rate(100).sleep();
                ros::spinOnce();
@@ -52,6 +55,7 @@ class MotionDetectionNode
 
            image_received = false;
            cloud_received = false;
+           odom_received = false;
 
            cv_bridge::CvImagePtr cv_image1;
            cv_bridge::CvImagePtr cv_image2;
@@ -70,7 +74,7 @@ class MotionDetectionNode
                bs.getMotionContours(cv_image1->image, contour_image); 
                first_run = false;
            }
-
+#ifdef MANUAL_ODOM
            std::vector<double> odom;
            double x_trans, y_trans, z_trans, roll, pitch, yaw;
            int pixel_step;
@@ -90,7 +94,34 @@ class MotionDetectionNode
            odom.push_back(roll);
            odom.push_back(pitch);
            odom.push_back(yaw);
+#else
+           std::vector<double> odom;
+           double x_trans, y_trans, z_trans, roll, pitch, yaw;
+           int pixel_step;
+           double distance_threshold, angular_threshold;
 
+           /*
+           tf::Quaternion q;
+           tf::quaternionMsgToTF(odom_.pose.pose.orientation, q);
+           tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
+           */
+
+           z_trans = odom_.pose.pose.position.x - prev_odom_.pose.pose.position.x;
+           y_trans = odom_.pose.pose.position.y - prev_odom_.pose.pose.position.y;
+           x_trans = odom_.pose.pose.position.z - prev_odom_.pose.pose.position.z;
+           odom.push_back(x_trans);
+           odom.push_back(0.0);
+           odom.push_back(z_trans);
+           odom.push_back(0.0);
+           odom.push_back(0.0);
+           odom.push_back(0.0);
+
+           prev_odom_ = odom_;
+
+           nh_.getParam("pixel_step", pixel_step);
+           nh_.getParam("distance_threshold", distance_threshold);
+           nh_.getParam("angular_threshold", angular_threshold);
+#endif
 
            pcl::PCLPointCloud2 pc2;
            pcl_conversions::toPCL(cloud, pc2);
@@ -235,6 +266,12 @@ class MotionDetectionNode
            image2_publisher.publish(raw_image2);
            image_received = false;
         }
+        
+        void odomCallback(const nav_msgs::Odometry &odom)
+        {
+            odom_ = odom;
+            odom_received = true;
+        }
 
         void cloudCallback(const sensor_msgs::PointCloud2 &cloud)
         {
@@ -286,6 +323,7 @@ class MotionDetectionNode
         image_transport::ImageTransport it_;
         ros::Subscriber cloud_subscriber;
         ros::Subscriber camera_info_subscriber;
+        ros::Subscriber odom_subscriber;
         image_transport::Subscriber image_subscriber;
         image_transport::Publisher image_publisher;
         image_transport::Publisher image1_publisher;
@@ -296,6 +334,7 @@ class MotionDetectionNode
         image_transport::Publisher background_subtraction_publisher;
         bool cloud_received;
         bool image_received;
+        bool odom_received;        
         bool first_image_received;
         bool camera_params_set;
         bool first_run;
@@ -303,6 +342,8 @@ class MotionDetectionNode
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::ImageConstPtr raw_image1;
         sensor_msgs::ImageConstPtr raw_image2;
+        nav_msgs::Odometry odom_;
+        nav_msgs::Odometry prev_odom_;
         OpticalFlowCalculator ofc;
         ExpectedFlowCalculator efc;
         FlowClusterer fc;
