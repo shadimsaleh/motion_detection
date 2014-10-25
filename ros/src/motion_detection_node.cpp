@@ -22,14 +22,15 @@
 class MotionDetectionNode
 {
     public:
-        MotionDetectionNode(ros::NodeHandle &n) : nh_(n), it_(n), rng(12345)
+        MotionDetectionNode(ros::NodeHandle &n) : nh_(n), it_(n), rng(12345), output_cap("/home/santosh/test.avi", CV_FOURCC('X', 'V', 'I', 'D'), 15, cv::Size(320, 240), true)
         {
             cloud_received = false;
             image_received = false;
-            odom_received = false;
+            odom_received = true;
             first_image_received = false;
             camera_params_set = false;
             first_run = true;
+            nh_.param<bool>("use_odom", use_odom, false);
             image_publisher = it_.advertise("optical_flow_image", 1);
             image1_publisher = it_.advertise("image1", 1);
             image2_publisher = it_.advertise("image2", 1);
@@ -40,22 +41,24 @@ class MotionDetectionNode
 
             cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
             image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
-            odom_subscriber = nh_.subscribe("/odom", 1, &MotionDetectionNode::odomCallback, this);
+            if (use_odom)
+            {
+                odom_subscriber = nh_.subscribe("/odom", 1, &MotionDetectionNode::odomCallback, this);
+            }
 
             camera_info_subscriber = nh_.subscribe("input_camerainfo", 1, &MotionDetectionNode::cameraCallback, this);
         }
 
         void runExpectedFlow()
         {           
-           while (!cloud_received || !image_received || !camera_params_set || !odom_received)
+           while (!cloud_received || !image_received || !camera_params_set || (!odom_received && use_odom))
            {
                ros::Rate(100).sleep();
                ros::spinOnce();
            }
-
            image_received = false;
            cloud_received = false;
-           odom_received = false;
+           odom_received = true;
 
            cv_bridge::CvImagePtr cv_image1;
            cv_bridge::CvImagePtr cv_image2;
@@ -74,54 +77,45 @@ class MotionDetectionNode
                bs.getMotionContours(cv_image1->image, contour_image); 
                first_run = false;
            }
-#ifdef MANUAL_ODOM
+           
            std::vector<double> odom;
            double x_trans, y_trans, z_trans, roll, pitch, yaw;
            int pixel_step;
            double distance_threshold, angular_threshold;
-           nh_.getParam("x_trans", x_trans);
-           nh_.getParam("y_trans", y_trans);
-           nh_.getParam("z_trans", z_trans);
-           nh_.getParam("roll", roll);
-           nh_.getParam("pitch", pitch);
-           nh_.getParam("yaw", yaw);
-           nh_.getParam("pixel_step", pixel_step);
-           nh_.getParam("distance_threshold", distance_threshold);
-           nh_.getParam("angular_threshold", angular_threshold);
-           odom.push_back(x_trans);
-           odom.push_back(y_trans);
-           odom.push_back(z_trans);
-           odom.push_back(roll);
-           odom.push_back(pitch);
-           odom.push_back(yaw);
-#else
-           std::vector<double> odom;
-           double x_trans, y_trans, z_trans, roll, pitch, yaw;
-           int pixel_step;
-           double distance_threshold, angular_threshold;
+           if (!use_odom)
+           {
+               nh_.getParam("x_trans", x_trans);
+               nh_.getParam("y_trans", y_trans);
+               nh_.getParam("z_trans", z_trans);
+               nh_.getParam("roll", roll);
+               nh_.getParam("pitch", pitch);
+               nh_.getParam("yaw", yaw);
+               odom.push_back(x_trans);
+               odom.push_back(y_trans);
+               odom.push_back(z_trans);
+               odom.push_back(roll);
+               odom.push_back(pitch);
+               odom.push_back(yaw);
+           }
+           else
+           {
+               z_trans = odom_.pose.pose.position.x - prev_odom_.pose.pose.position.x;
+               y_trans = odom_.pose.pose.position.y - prev_odom_.pose.pose.position.y;
+               x_trans = odom_.pose.pose.position.z - prev_odom_.pose.pose.position.z;
+               odom.push_back(x_trans);
+               odom.push_back(0.0);
+               odom.push_back(z_trans);
+               odom.push_back(0.0);
+               odom.push_back(0.0);
+               odom.push_back(0.0);
+               prev_odom_ = odom_;
+           }
 
-           /*
-           tf::Quaternion q;
-           tf::quaternionMsgToTF(odom_.pose.pose.orientation, q);
-           tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
-           */
 
-           z_trans = odom_.pose.pose.position.x - prev_odom_.pose.pose.position.x;
-           y_trans = odom_.pose.pose.position.y - prev_odom_.pose.pose.position.y;
-           x_trans = odom_.pose.pose.position.z - prev_odom_.pose.pose.position.z;
-           odom.push_back(x_trans);
-           odom.push_back(0.0);
-           odom.push_back(z_trans);
-           odom.push_back(0.0);
-           odom.push_back(0.0);
-           odom.push_back(0.0);
-
-           prev_odom_ = odom_;
 
            nh_.getParam("pixel_step", pixel_step);
            nh_.getParam("distance_threshold", distance_threshold);
            nh_.getParam("angular_threshold", angular_threshold);
-#endif
 
            pcl::PCLPointCloud2 pc2;
            pcl_conversions::toPCL(cloud, pc2);
@@ -149,6 +143,9 @@ class MotionDetectionNode
            int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step);
            
            ofv.showOpticalFlowVectors(cv_image1->image, optical_flow_image, optical_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
+           cv::Mat mat2;
+           cv::cvtColor(optical_flow_image, mat2, CV_RGB2BGR);
+           output_cap.write(mat2);
            //int num_vectors = ofc.superPixelFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
            
            //cv::Mat centers;
@@ -338,6 +335,7 @@ class MotionDetectionNode
         bool first_image_received;
         bool camera_params_set;
         bool first_run;
+        bool use_odom;
 
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::ImageConstPtr raw_image1;
@@ -350,6 +348,8 @@ class MotionDetectionNode
         FlowDifferenceCalculator fdc;
         OpticalFlowVisualizer ofv;
         BackgroundSubtractor bs;
+
+        cv::VideoWriter output_cap;
 
         cv::RNG rng;
 

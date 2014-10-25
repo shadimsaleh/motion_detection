@@ -26,7 +26,7 @@ void OpticalFlowVisualizer::showOpticalFlowVectors(const cv::Mat &original_image
 
             cv::Vec4d elem = optical_flow_vectors.at<cv::Vec4d>(i, j);
 
-            if ((elem[2] > 1.0 || elem[3] > 1.0) && elem[2] < pixel_step*5 && elem[3] < pixel_step*5) 
+            if ((abs(elem[2])> 1.0 || abs(elem[3]) > 1.0) && abs(elem[2]) < pixel_step*5 && abs(elem[3]) < pixel_step*5) 
             {
 
                 start_point.x = elem[0];

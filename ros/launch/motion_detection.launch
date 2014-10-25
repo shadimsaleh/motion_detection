@@ -12,6 +12,7 @@
         <param name="roll"    type="double" value="0.0" />
         <param name="pitch"   type="double" value="0.0" />
         <param name="yaw"     type="double" value="0.0" />
+        <param name="use_odom" type="bool" value="true" />
 
         <param name="pixel_step" type="int" value="10" />
         <param name="distance_threshold" type="double" value="50.0" />
