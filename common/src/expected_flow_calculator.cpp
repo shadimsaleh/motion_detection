@@ -34,6 +34,41 @@ void ExpectedFlowCalculator::calculateExpectedFlow(PointCloud frame,
                                                                           int pixel_step)
 {
 
+    if (odom[2] == 0.0)
+    {
+        if (odom[0] == 0.0 && odom[1] == 0.0)
+        {
+            std::cout << "foe: no movement" << std::endl;
+        }
+        else if (odom[0] == 0.0)
+        {
+            if (odom[1] > 0.0)
+            {
+                std::cout << "foe: positive y infinity" << std::endl;
+            }
+            else
+            {
+                std::cout << "foe: negative y infinity" << std::endl;
+            }
+        }
+        else if (odom[1] == 0)
+        {
+            if (odom[0] > 0.0)
+            {
+                std::cout << "foe: positive x infinity" << std::endl;
+            }
+            else
+            {
+                std::cout << "foe: negative x infinity" << std::endl;
+            }
+        }
+    }
+    else
+    {
+        double foe_x = odom[0] / odom[2];
+        double foe_y = odom[1] / odom[2];
+        std::cout << "foe: " << foe_x << ", " << foe_y << std::endl;
+    }
     pcl::PointCloud<PointT>::Ptr frame1(new pcl::PointCloud<PointT>);
     pcl::fromPCLPointCloud2(frame, *frame1);
 

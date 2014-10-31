@@ -76,7 +76,7 @@ std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_v
         for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
         {
             cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
-            if (vec[2] > 0.0 || vec[3] > 0.0)
+            if (abs(vec[2]) > 0.0 || abs(vec[3]) > 0.0)
             {
                 bool added = false;
                 for (int k = 0; k < clusters.size(); k++)
@@ -113,7 +113,7 @@ std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int
         for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
         {
             cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
-            if (vec[2] > 0.0 || vec[3] > 0.0)
+            if (abs(vec[2]) > 0.0 || abs(vec[3]) > 0.0)
             {
                 bool added = false;
                 for (int k = 0; k < clusters.size(); k++)

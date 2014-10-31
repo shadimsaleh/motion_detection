@@ -18,7 +18,109 @@ OpticalFlowCalculator::~OpticalFlowCalculator()
 
 }
 
-int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step)
+int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step, cv::Mat &comp)
+{
+    /*
+    const int MAX_LEVEL = 2;
+    cv::Size winSize(40, 40);
+    std::vector<uchar> status;
+    std::vector<float> err;
+    cv::TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10, 0.03);
+    */
+
+    const int MAX_LEVEL = 5;
+    cv::Size winSize(40, 40);
+    std::vector<uchar> status;
+    std::vector<float> err;
+    cv::TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10, 0.03);
+
+    
+    cv::Mat gray_image1;
+    cv::Mat gray_image2;
+
+    cvtColor(image1, gray_image1, CV_BGR2GRAY);
+    cvtColor(image2, gray_image2, CV_BGR2GRAY);
+
+    std::vector<cv::Point2f> points_image1;
+    std::vector<cv::Point2f> points_image2;
+
+    for (int i = 0; i < image1.cols; i = i + pixel_step)
+    {
+        for (int j = 0; j < image1.rows; j = j + pixel_step)
+        {
+            cv::Point2f point(i, j);
+            //std::cout << "adding point " << i << ", " << j << std::endl;
+            points_image1.push_back(point);
+        }
+    }
+
+    std::vector<cv::Mat> pyramids;
+    cv::buildOpticalFlowPyramid(gray_image1, pyramids, winSize, MAX_LEVEL, true);
+
+    //cv::calcOpticalFlowPyrLK(gray_image1, gray_image2, points_image1, points_image2, status, err, winSize, MAX_LEVEL, termcrit, 0, 0.001);
+
+    cv::calcOpticalFlowPyrLK(pyramids, gray_image2, points_image1, points_image2, status, err, winSize, MAX_LEVEL, termcrit, 0, 0.001);
+
+    int num_vectors = 0;
+
+    std::vector<cv::Point2f> src_points;
+    std::vector<cv::Point2f> dst_points;
+
+    for (int i = 0; i < points_image2.size(); i++)
+    {
+        if (status[i])
+        {
+            cv::Point2f start_point = points_image1.at(i);
+            cv::Point2f end_point = points_image2.at(i);
+            float x_diff = end_point.x - start_point.x;
+            float y_diff = end_point.y - start_point.y;
+            if (abs(x_diff) > 1.0 || abs(y_diff) > 1.0)
+            {
+                cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                elem[0] = start_point.x;
+                elem[1] = start_point.y;
+                elem[2] = x_diff;
+                elem[3] = y_diff;
+                //elem[2] = atan2(y_diff, x_diff);
+                //elem[3] = sqrt(x_diff*x_diff + y_diff*y_diff);
+                src_points.push_back(start_point);
+                dst_points.push_back(end_point);
+                num_vectors++;
+            }
+            else
+            {
+                cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                elem[0] = start_point.x;
+                elem[1] = start_point.y;
+                elem[2] = 0.0;
+                elem[3] = 0.0;
+            }
+        }
+        else
+        {
+            cv::Point2f start_point = points_image1.at(i);
+            cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+            elem[0] = -1.0;
+            elem[1] = -1.0;
+            elem[2] = 0.0;
+            elem[3] = 0.0;
+        }
+    }
+    if (num_vectors > 0)
+    {
+        cv::Mat pers_transform = cv::getPerspectiveTransform(&src_points[0], &dst_points[0]);
+        cv::Mat compensated;
+        gray_image2.copyTo(compensated);
+        gray_image2.copyTo(comp);
+        cv::warpPerspective(gray_image1, compensated, pers_transform, cv::Size(gray_image1.cols, gray_image1.rows));
+        cv::absdiff(compensated, gray_image2, comp);
+        //std::cout << comp << std::endl;
+        cv::threshold(comp, comp, 190, 255, CV_THRESH_BINARY);
+    }
+    return num_vectors;
+}
+
+int OpticalFlowCalculator::calculateCompensatedFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step)
 {
     const int MAX_LEVEL = 2;
     cv::Size winSize(40, 40);
@@ -50,6 +152,7 @@ int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv:
 
 
     int num_vectors = 0;
+
     for (int i = 0; i < points_image2.size(); i++)
     {
         if (status[i])
@@ -69,9 +172,25 @@ int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv:
                 //elem[3] = sqrt(x_diff*x_diff + y_diff*y_diff);
                 num_vectors++;
             }
+            else
+            {
+                cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                elem[0] = start_point.x;
+                elem[1] = start_point.y;
+                elem[2] = 0.0;
+                elem[3] = 0.0;
+            }
+        }
+        else
+        {
+            cv::Point2f start_point = points_image1.at(i);
+            cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+            elem[0] = -1.0;
+            elem[1] = -1.0;
+            elem[2] = 0.0; 
+            elem[3] = 0.0;
         }
     }
-    return num_vectors;
 }
 
 int OpticalFlowCalculator::superPixelFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_image, cv::Mat &optical_flow_vectors)

@@ -50,6 +50,7 @@ add_executable(motion_detection
   common/src/optical_flow_visualizer.cpp
   common/src/vector_cluster.cpp
   common/src/background_subtractor.cpp
+  common/src/flow_neighbour_similarity_calculator.cpp
   common/src/VarFlow.cpp
   common/src/slic.cpp
 )

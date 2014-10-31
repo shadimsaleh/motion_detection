@@ -9,6 +9,7 @@
 #include <motion_detection/flow_difference_calculator.h>
 #include <motion_detection/optical_flow_visualizer.h>
 #include <motion_detection/background_subtractor.h>
+#include <motion_detection/flow_neighbour_similarity_calculator.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/conversions.h>
 #include <pcl/PCLPointCloud2.h>
@@ -26,11 +27,13 @@ class MotionDetectionNode
         {
             cloud_received = false;
             image_received = false;
-            odom_received = true;
+            odom_received = false;
             first_image_received = false;
             camera_params_set = false;
             first_run = true;
             nh_.param<bool>("use_odom", use_odom, false);
+            nh_.param<bool>("use_pointcloud", use_pointcloud, false);
+            nh_.param<bool>("record_video", record_video, false);
             image_publisher = it_.advertise("optical_flow_image", 1);
             image1_publisher = it_.advertise("image1", 1);
             image2_publisher = it_.advertise("image2", 1);
@@ -39,7 +42,10 @@ class MotionDetectionNode
             clustered_flow_publisher = it_.advertise("clustered_flow_image", 1);
             background_subtraction_publisher = it_.advertise("background_subtraction_image", 1);
 
-            cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
+            if (use_pointcloud)
+            {
+                cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
+            }
             image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
             if (use_odom)
             {
@@ -51,20 +57,19 @@ class MotionDetectionNode
 
         void runExpectedFlow()
         {           
-           while (!cloud_received || !image_received || !camera_params_set || (!odom_received && use_odom))
+           while ((!cloud_received && use_pointcloud) || !image_received || (!camera_params_set && use_pointcloud) || (!odom_received && use_odom))
            {
                ros::Rate(100).sleep();
                ros::spinOnce();
            }
            image_received = false;
            cloud_received = false;
-           odom_received = true;
+           odom_received = false;
 
            cv_bridge::CvImagePtr cv_image1;
            cv_bridge::CvImagePtr cv_image2;
            cv_image1 = cv_bridge::toCvCopy(raw_image1, "rgb8");
            cv_image2 = cv_bridge::toCvCopy(raw_image2, "rgb8");
-           //ROS_INFO("received cloud");
 
            cv_bridge::CvImagePtr cv_image;
 
@@ -117,35 +122,38 @@ class MotionDetectionNode
            nh_.getParam("distance_threshold", distance_threshold);
            nh_.getParam("angular_threshold", angular_threshold);
 
-           pcl::PCLPointCloud2 pc2;
-           pcl_conversions::toPCL(cloud, pc2);
-           
-//           cv::Mat empty_image = cv::Mat::ones(cv_image->image.rows, cv_image->image.cols, CV_8UC3);
-
-           cv::Mat expected_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-           efc.calculateExpectedFlow(pc2, odom, projected_image, expected_flow_vectors, pixel_step);
-           ofv.showOpticalFlowVectors(cv_image1->image, cv_image->image, expected_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
-//           ofv.showOpticalFlowVectors(cv_image1->image, empty_image, expected_flow_vectors, pixel_step);
 
 
-           cv_bridge::CvImage expected_flow_image_msg;
-           expected_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           expected_flow_image_msg.image = cv_image->image;
-//           expected_flow_image_msg.image = empty_image;
-           expected_flow_publisher.publish(expected_flow_image_msg.toImageMsg());
-           
-           
+#define BOO
+#ifdef BOO
+
+           cv::Mat compensated_optical_flow_image;
+               
+#endif           
 
 
            cv::Mat optical_flow_image;
 
            cv::Mat optical_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step);
+           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step, compensated_optical_flow_image);
+
+#ifdef BOO
+           cv::cvtColor(compensated_optical_flow_image, compensated_optical_flow_image, CV_GRAY2RGB);
+           cv_bridge::CvImage compensated_flow_image_msg;
+           compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
+           compensated_flow_image_msg.image = compensated_optical_flow_image;
+           compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
+#endif
            
            ofv.showOpticalFlowVectors(cv_image1->image, optical_flow_image, optical_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
-           cv::Mat mat2;
-           cv::cvtColor(optical_flow_image, mat2, CV_RGB2BGR);
-           output_cap.write(mat2);
+           cv::Mat similarity = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_64F);
+           fs.calculateNeighbourhoodSimilarity(optical_flow_vectors, similarity, pixel_step);
+           if (record_video)
+           {
+               cv::Mat mat2;
+               cv::cvtColor(optical_flow_image, mat2, CV_RGB2BGR);
+               output_cap.write(mat2);
+           }
            //int num_vectors = ofc.superPixelFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
            
            //cv::Mat centers;
@@ -204,17 +212,31 @@ class MotionDetectionNode
                clustered_flow_publisher.publish(clustered_flow_image_msg.toImageMsg());
            }
 #endif
-           
-           cv::Mat difference_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-           fdc.calculateFlowDifference(optical_flow_vectors, expected_flow_vectors, difference_vectors, pixel_step);
+           if (use_pointcloud)
+           {
+               pcl::PCLPointCloud2 pc2;
+               pcl_conversions::toPCL(cloud, pc2);
 
-           cv::Mat compensated_optical_flow_image;
-           ofv.showOpticalFlowVectors(cv_image1->image, compensated_optical_flow_image, difference_vectors, pixel_step, CV_RGB(0, 0, 255)); 
-           
-           cv_bridge::CvImage compensated_flow_image_msg;
-           compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           compensated_flow_image_msg.image = compensated_optical_flow_image;
-           compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
+               cv::Mat expected_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
+               efc.calculateExpectedFlow(pc2, odom, projected_image, expected_flow_vectors, pixel_step);
+               ofv.showOpticalFlowVectors(cv_image1->image, cv_image->image, expected_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
+
+               cv_bridge::CvImage expected_flow_image_msg;
+               expected_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
+               expected_flow_image_msg.image = cv_image->image;
+               expected_flow_publisher.publish(expected_flow_image_msg.toImageMsg());
+
+               cv::Mat difference_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
+               fdc.calculateFlowDifference(optical_flow_vectors, expected_flow_vectors, difference_vectors, pixel_step);
+
+               cv::Mat compensated_optical_flow_image;
+               ofv.showOpticalFlowVectors(cv_image1->image, compensated_optical_flow_image, difference_vectors, pixel_step, CV_RGB(0, 0, 255)); 
+               
+               cv_bridge::CvImage compensated_flow_image_msg;
+               compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
+               compensated_flow_image_msg.image = compensated_optical_flow_image;
+               compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
+           }
 
            cv_bridge::CvImage optical_flow_image_msg;
            optical_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
@@ -230,6 +252,11 @@ class MotionDetectionNode
            bs_contours_msg.encoding = sensor_msgs::image_encodings::RGB8;
            bs_contours_msg.image = bs_contours;
            background_subtraction_publisher.publish(bs_contours_msg.toImageMsg());
+        }
+
+        void testOpticalFlow()
+        {
+
         }
 
         void runOpticalFlow()
@@ -336,6 +363,8 @@ class MotionDetectionNode
         bool camera_params_set;
         bool first_run;
         bool use_odom;
+        bool use_pointcloud;
+        bool record_video;
 
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::ImageConstPtr raw_image1;
@@ -348,6 +377,7 @@ class MotionDetectionNode
         FlowDifferenceCalculator fdc;
         OpticalFlowVisualizer ofv;
         BackgroundSubtractor bs;
+        FlowNeighbourSimilarityCalculator fs;
 
         cv::VideoWriter output_cap;
 
