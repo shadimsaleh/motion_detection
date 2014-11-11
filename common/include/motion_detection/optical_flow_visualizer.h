@@ -10,6 +10,8 @@ class OpticalFlowVisualizer
         virtual ~OpticalFlowVisualizer();
 
         void showOpticalFlowVectors(const cv::Mat &original, cv::Mat &optical_flow_image, const cv::Mat &optical_flow_vectors, int pixel_step, cv::Scalar colour);        
+        void showFlowClusters(const cv::Mat &original, cv::Mat &optical_flow_image, const std::vector<cv::Vec4d> &optical_flow_vectors, int pixel_step, cv::Scalar colour);        
+        void showFlowOutliers(const cv::Mat &original, cv::Mat &outlier_image, const cv::Mat &outlier_mask, const cv::Mat &optical_flow_vectors, int pixel_step, bool print);
 
 };
 #endif

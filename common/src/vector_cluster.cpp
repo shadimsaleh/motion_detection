@@ -1,4 +1,5 @@
 #include <motion_detection/vector_cluster.h>
+#include <iostream>
 
 VectorCluster::VectorCluster()
 {
@@ -82,6 +83,26 @@ std::vector<cv::Point2f> VectorCluster::getClusterPoints()
     return cluster_points;
 }
 
+std::vector<cv::Vec4d> VectorCluster::getMeanVector()
+{
+    cv::Point2f centroid = getCentroid();
+    double orientation = getMeanOrientation();
+    double magnitude = 50.0;
+    cv::Point2f diff;    
+    diff.x = magnitude * cos(orientation);
+    diff.y = magnitude * sin(orientation);
+    std::vector<cv::Vec4d> mean_vector;
+    cv::Vec4d v;
+    v[0] = centroid.x;
+    v[1] = centroid.y;
+    v[2] = diff.x;
+    v[3] = diff.y;
+    //std::cout << "centroid: " << v[0] << ", " << v[1] << std::endl;
+    mean_vector.push_back(v);
+    return mean_vector;
+
+}
+
 int VectorCluster::size()
 {
     return cluster_.size();
@@ -107,4 +128,21 @@ double VectorCluster::getAngle(const cv::Vec4d &vector)
         ang += 2 * M_PI;
     }
     return ang;
+}
+
+void VectorCluster::getMinMax(double &min_x, double &max_x, double &min_y, double &max_y)
+{
+    min_x = 10000.0;
+    max_x = -1.0;
+    min_y = 10000.0;
+    max_y = -1.0;
+    for (int i = 0; i < cluster_.size(); i++)
+    {
+        double x = cluster_.at(i)[0];
+        double y = cluster_.at(i)[0];
+        if (x < min_x) min_x = x;
+        if (y < min_y) min_y = y;
+        if (x > max_x) max_x = x;
+        if (y > max_y) max_y = y;
+    }
 }

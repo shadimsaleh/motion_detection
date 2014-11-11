@@ -18,6 +18,8 @@ class OpticalFlowCalculator
         void varFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow, cv::Mat &optical_flow_vectors);
 
         void drawMotionField(IplImage* imgU, IplImage* imgV, IplImage* imgMotion, int xSpace, int ySpace, float cutoff, int multiplier, CvScalar color);
+
+        void writeFlow(const cv::Mat &flow_vectors, const std::string &filename, int pixel_step);
 };
 
 #endif

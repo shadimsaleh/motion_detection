@@ -17,6 +17,7 @@ class VectorCluster
         
         std::vector<cv::Vec4d> getCluster();
         std::vector<cv::Point2f> getClusterPoints();
+        std::vector<cv::Vec4d> getMeanVector();
         int size();
 
 
@@ -24,6 +25,7 @@ class VectorCluster
         double getDistance(const cv::Vec4d &one, const cv::Vec4d &two);
         double getAngularDistance(const cv::Vec4d &one, const cv::Vec4d &two);
         double getAngle(const cv::Vec4d &vector);
+        void getMinMax(double &min_x, double &max_x, double &min_y, double &max_y);
 
 
     private:

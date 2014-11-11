@@ -76,7 +76,7 @@ std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_v
         for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
         {
             cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
-            if (abs(vec[2]) > 0.0 || abs(vec[3]) > 0.0)
+            if (std::abs(vec[2]) > 0.0 || std::abs(vec[3]) > 0.0)
             {
                 bool added = false;
                 for (int k = 0; k < clusters.size(); k++)
@@ -105,7 +105,7 @@ std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_v
     return centroids;
 }
 
-std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
+std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
 {
     std::vector<VectorCluster> clusters;
     for (int i = 0; i < flow_vectors.rows; i = i + pixel_step)
@@ -113,7 +113,7 @@ std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int
         for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
         {
             cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
-            if (abs(vec[2]) > 0.0 || abs(vec[3]) > 0.0)
+            if (std::abs(vec[2]) > 0.0 || std::abs(vec[3]) > 0.0)
             {
                 bool added = false;
                 for (int k = 0; k < clusters.size(); k++)
@@ -135,15 +135,23 @@ std::vector<cv::Mat> FlowClusterer::getClusters(const cv::Mat &flow_vectors, int
             }
         }
     }
-    std::vector<cv::Mat> mat_clusters;    
+    std::vector<std::vector<cv::Vec4d> > mat_clusters;    
+    //std::cout << "clusters_zero: " << std::endl;
     for (int i = 0; i < clusters.size(); i++)
     {
 //        cv::Mat cluster_points(clusters.at(i).getCluster(), true);
         if (clusters.at(i).size() > 5)
         {
-            mat_clusters.push_back(cv::Mat(clusters.at(i).getCluster()).reshape(1));
+            mat_clusters.push_back(clusters.at(i).getMeanVector());
         }
     }
+    /*
+    std::cout << "clusters_first: " << std::endl;
+    for (int i = 0; i < mat_clusters.size(); i++)
+    {
+        std::cout << mat_clusters.at(i) << std::endl;
+    }
+    */
     return mat_clusters;
 }
 

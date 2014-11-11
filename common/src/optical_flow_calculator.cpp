@@ -7,6 +7,7 @@
 #include <opencv/highgui.h>
 #include <motion_detection/VarFlow.h>
 #include <motion_detection/slic.h>
+#include <fstream>
 
 OpticalFlowCalculator::OpticalFlowCalculator()
 {
@@ -74,7 +75,7 @@ int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv:
             cv::Point2f end_point = points_image2.at(i);
             float x_diff = end_point.x - start_point.x;
             float y_diff = end_point.y - start_point.y;
-            if (abs(x_diff) > 1.0 || abs(y_diff) > 1.0)
+            if (std::abs(x_diff) > 1.0 || std::abs(y_diff) > 1.0) // THIS USED TO BE 1.0
             {
                 cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
                 elem[0] = start_point.x;
@@ -161,7 +162,7 @@ int OpticalFlowCalculator::calculateCompensatedFlow(const cv::Mat &image1, const
             cv::Point2f end_point = points_image2.at(i);
             float x_diff = end_point.x - start_point.x;
             float y_diff = end_point.y - start_point.y;
-            if (abs(x_diff) > 1.0 || abs(y_diff) > 1.0)
+            if (std::abs(x_diff) > 1.0 || std::abs(y_diff) > 1.0)
             {
                 cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
                 elem[0] = start_point.x;
@@ -363,4 +364,38 @@ void OpticalFlowCalculator::drawMotionField(IplImage* imgU, IplImage* imgV, IplI
         }
     }
     
+}
+
+void OpticalFlowCalculator::writeFlow(const cv::Mat &optical_flow_vectors, const std::string &filename, int pixel_step)
+{
+    std::string horizontal_f = filename + "_h";
+    std::string vertical_f = filename + "_f";
+    ofstream hfile(horizontal_f);
+    ofstream vfile(vertical_f);
+    for (int i = 0; i < optical_flow_vectors.rows; i = i + pixel_step)
+    {
+        for (int j = 0; j < optical_flow_vectors.cols; j = j + pixel_step)
+        {
+            if (j != 0)
+            {
+                hfile << ", ";
+                vfile << ", ";
+            }
+            cv::Vec4d elem = optical_flow_vectors.at<cv::Vec4d>(i, j);
+            if (elem[0] == -1.0)
+            {
+                hfile << 0.0;
+                vfile << 0.0;
+            }
+            else
+            {
+                hfile << elem[2];
+                vfile << elem[3];
+            }
+        }
+        hfile << endl;
+        vfile << endl;
+    }
+    hfile.close();
+    vfile.close();
 }

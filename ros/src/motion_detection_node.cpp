@@ -1,15 +1,5 @@
-#include <ros/ros.h>
-#include <image_transport/image_transport.h>
-#include <nav_msgs/Odometry.h>
+#include <motion_detection/motion_detection_node.h>
 #include <sensor_msgs/image_encodings.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <motion_detection/expected_flow_calculator.h>
-#include <motion_detection/optical_flow_calculator.h>
-#include <motion_detection/flow_clusterer.h>
-#include <motion_detection/flow_difference_calculator.h>
-#include <motion_detection/optical_flow_visualizer.h>
-#include <motion_detection/background_subtractor.h>
-#include <motion_detection/flow_neighbour_similarity_calculator.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/conversions.h>
 #include <pcl/PCLPointCloud2.h>
@@ -20,370 +10,188 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-class MotionDetectionNode
+MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh), rng(12345), output_cap_("/home/santosh/test.avi", CV_FOURCC('D', 'I', 'V', 'X'), 30, cv::Size(320, 240), true)
 {
-    public:
-        MotionDetectionNode(ros::NodeHandle &n) : nh_(n), it_(n), rng(12345), output_cap("/home/santosh/test.avi", CV_FOURCC('X', 'V', 'I', 'D'), 15, cv::Size(320, 240), true)
+    cloud_received_ = false;
+    image_received_ = false;
+    odom_received_ = false;
+    first_image_received_ = false;
+    camera_params_set_ = false;
+    first_run_ = true;
+    nh_.getParam("pixel_step", pixel_step_);
+    frame_number_ = 0;
+
+    nh_.param<bool>("use_odom", use_odom_, false);
+    nh_.param<bool>("use_pointcloud", use_pointcloud_, false);
+    nh_.param<bool>("record_video", record_video_, false);
+    nh_.param<bool>("use_all_frames", use_all_frames_, false);
+    nh_.param<bool>("write_vectors", write_vectors_, false);
+    nh_.param<bool>("include_zeros", include_zeros_, false);
+
+    of_image_publisher_ = it_.advertise("optical_flow_image", 1);
+    image1_publisher_ = it_.advertise("image1", 1);
+    image2_publisher_ = it_.advertise("image2", 1);
+    expected_flow_publisher_ = it_.advertise("expected_flow_image", 1);
+    compensated_flow_publisher_ = it_.advertise("compensated_flow_image", 1);
+    clustered_flow_publisher_ = it_.advertise("clustered_flow_image", 1);
+    background_subtraction_publisher_ = it_.advertise("background_subtraction_image", 1);
+
+    if (use_pointcloud_)
+    {
+        cloud_subscriber_ = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
+    }
+    image_subscriber_ = it_.subscribe("input_image", 0, &MotionDetectionNode::imageCallback, this);
+    if (use_odom_)
+    {
+        odom_subscriber_ = nh_.subscribe("/odom", 1, &MotionDetectionNode::odomCallback, this);
+    }
+
+    camera_info_subscriber_ = nh_.subscribe("input_camerainfo", 1, &MotionDetectionNode::cameraInfoCallback, this);
+}
+
+MotionDetectionNode::~MotionDetectionNode()
+{
+}
+
+void MotionDetectionNode::runOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors)
+{
+    cv::Mat debug_image;
+    cv::Mat optical_flow_image;
+
+    optical_flow_vectors = cv::Mat::zeros(image1.rows, image1.cols, CV_32FC4);
+    int num_vectors = ofc_.calculateOpticalFlow(image1, image2, optical_flow_vectors, pixel_step_, debug_image);
+    ofv_.showOpticalFlowVectors(image1, optical_flow_image, optical_flow_vectors, pixel_step_, CV_RGB(0, 0, 255));
+
+    publishImage(optical_flow_image, of_image_publisher_);
+    if (record_video_)
+    {
+        cv::Mat mat2;
+        cv::cvtColor(optical_flow_image, mat2, CV_RGB2BGR);
+        output_cap_.write(mat2);
+    }
+}
+
+void MotionDetectionNode::detectOutliers(const cv::Mat &original_image, const cv::Mat &optical_flow_vectors, cv::Mat &outlier_mask, bool include_zeros)
+{
+    od_.findOutliers(optical_flow_vectors, outlier_mask, include_zeros, pixel_step_, false);
+    cv::Mat outlier_image;
+    ofv_.showFlowOutliers(original_image, outlier_image, optical_flow_vectors, outlier_mask, pixel_step_, false); 
+
+    publishImage(outlier_image, compensated_flow_publisher_);
+}
+
+void MotionDetectionNode::clusterFlow(const cv::Mat &image, const cv::Mat &flow_vectors, std::vector<std::vector<cv::Vec4d> > &clusters)
+{
+    double distance_threshold, angular_threshold;
+    nh_.getParam("distance_threshold", distance_threshold);
+    nh_.getParam("angular_threshold", angular_threshold);
+
+    cv::Mat clustered_flow_image;
+    clusters = fc_.getClusters(flow_vectors, pixel_step_, distance_threshold, angular_threshold);
+    /*
+    std::cout << "clusters_second: " << std::endl;
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        std::cout << clusters.at(i) << std::endl; 
+    }
+    */
+
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        cv::Scalar colour;
+        cv::Mat temp;
+        switch (i)
         {
-            cloud_received = false;
-            image_received = false;
-            odom_received = false;
-            first_image_received = false;
-            camera_params_set = false;
-            first_run = true;
-            nh_.param<bool>("use_odom", use_odom, false);
-            nh_.param<bool>("use_pointcloud", use_pointcloud, false);
-            nh_.param<bool>("record_video", record_video, false);
-            image_publisher = it_.advertise("optical_flow_image", 1);
-            image1_publisher = it_.advertise("image1", 1);
-            image2_publisher = it_.advertise("image2", 1);
-            expected_flow_publisher = it_.advertise("expected_flow_image", 1);
-            compensated_flow_publisher = it_.advertise("compensated_flow_image", 1);
-            clustered_flow_publisher = it_.advertise("clustered_flow_image", 1);
-            background_subtraction_publisher = it_.advertise("background_subtraction_image", 1);
-
-            if (use_pointcloud)
-            {
-                cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
-            }
-            image_subscriber = it_.subscribe("input_image", 1, &MotionDetectionNode::imageCallback, this);
-            if (use_odom)
-            {
-                odom_subscriber = nh_.subscribe("/odom", 1, &MotionDetectionNode::odomCallback, this);
-            }
-
-            camera_info_subscriber = nh_.subscribe("input_camerainfo", 1, &MotionDetectionNode::cameraCallback, this);
+            case 0: colour = CV_RGB(0, 0, 255); break;
+            case 1: colour = CV_RGB(0, 255, 0); break;
+            case 2: colour = CV_RGB(255, 0, 0); break;
+            case 3: colour = CV_RGB(255, 0, 255); break;
+            case 4: colour = CV_RGB(255, 255, 0); break;
+            case 5: colour = CV_RGB(0, 255, 255); break;
+            default: colour = CV_RGB(0, 0, 255);break;
         }
 
-        void runExpectedFlow()
-        {           
-           while ((!cloud_received && use_pointcloud) || !image_received || (!camera_params_set && use_pointcloud) || (!odom_received && use_odom))
-           {
-               ros::Rate(100).sleep();
-               ros::spinOnce();
-           }
-           image_received = false;
-           cloud_received = false;
-           odom_received = false;
-
-           cv_bridge::CvImagePtr cv_image1;
-           cv_bridge::CvImagePtr cv_image2;
-           cv_image1 = cv_bridge::toCvCopy(raw_image1, "rgb8");
-           cv_image2 = cv_bridge::toCvCopy(raw_image2, "rgb8");
-
-           cv_bridge::CvImagePtr cv_image;
-
-           cv_image = cv_bridge::toCvCopy(raw_image2, "rgb8");
-           cv::Mat projected_image;
-
-           if(first_run)
-           {
-               cv::Mat contour_image;
-               bs.getMotionContours(cv_image1->image, contour_image); 
-               first_run = false;
-           }
-           
-           std::vector<double> odom;
-           double x_trans, y_trans, z_trans, roll, pitch, yaw;
-           int pixel_step;
-           double distance_threshold, angular_threshold;
-           if (!use_odom)
-           {
-               nh_.getParam("x_trans", x_trans);
-               nh_.getParam("y_trans", y_trans);
-               nh_.getParam("z_trans", z_trans);
-               nh_.getParam("roll", roll);
-               nh_.getParam("pitch", pitch);
-               nh_.getParam("yaw", yaw);
-               odom.push_back(x_trans);
-               odom.push_back(y_trans);
-               odom.push_back(z_trans);
-               odom.push_back(roll);
-               odom.push_back(pitch);
-               odom.push_back(yaw);
-           }
-           else
-           {
-               z_trans = odom_.pose.pose.position.x - prev_odom_.pose.pose.position.x;
-               y_trans = odom_.pose.pose.position.y - prev_odom_.pose.pose.position.y;
-               x_trans = odom_.pose.pose.position.z - prev_odom_.pose.pose.position.z;
-               odom.push_back(x_trans);
-               odom.push_back(0.0);
-               odom.push_back(z_trans);
-               odom.push_back(0.0);
-               odom.push_back(0.0);
-               odom.push_back(0.0);
-               prev_odom_ = odom_;
-           }
-
-
-
-           nh_.getParam("pixel_step", pixel_step);
-           nh_.getParam("distance_threshold", distance_threshold);
-           nh_.getParam("angular_threshold", angular_threshold);
-
-
-
-#define BOO
-#ifdef BOO
-
-           cv::Mat compensated_optical_flow_image;
-               
-#endif           
-
-
-           cv::Mat optical_flow_image;
-
-           cv::Mat optical_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step, compensated_optical_flow_image);
-
-#ifdef BOO
-           cv::cvtColor(compensated_optical_flow_image, compensated_optical_flow_image, CV_GRAY2RGB);
-           cv_bridge::CvImage compensated_flow_image_msg;
-           compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           compensated_flow_image_msg.image = compensated_optical_flow_image;
-           compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
-#endif
-           
-           ofv.showOpticalFlowVectors(cv_image1->image, optical_flow_image, optical_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
-           cv::Mat similarity = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_64F);
-           fs.calculateNeighbourhoodSimilarity(optical_flow_vectors, similarity, pixel_step);
-           if (record_video)
-           {
-               cv::Mat mat2;
-               cv::cvtColor(optical_flow_image, mat2, CV_RGB2BGR);
-               output_cap.write(mat2);
-           }
-           //int num_vectors = ofc.superPixelFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
-           
-           //cv::Mat centers;
-           std::vector<cv::Point2f> centers;
-#ifdef DRAW_CIRCLES
-           if (num_vectors > 0)
-           {
-               //centers = fc.clusterFlowVectors(optical_flow_vectors);          
-               centers = fc.getClusterCenters(optical_flow_vectors, pixel_step, distance_threshold, angular_threshold);
-               /*
-               for (int i = 0; i < centers.rows; i++)
-               {                 
-                   cv::circle(optical_flow_image, cv::Point((int)centers.at<float>(i,0), (int)centers.at<float>(i,1)), 5.0, cv::Scalar(0,0,255), -1, 8);
-               }
-               */
-               for (int i = 0; i < centers.size(); i++)
-               {
-                   cv::circle(optical_flow_image, centers.at(i), 5.0, cv::Scalar(0, 0, 255), -1, 8);
-               }
-           }
-#else
-           if (num_vectors > 0)
-           {
-               cv::Mat clustered_flow_image;
-               std::vector<cv::Mat> clusters = fc.getClusters(optical_flow_vectors, pixel_step, distance_threshold, angular_threshold);
-               for (int i = 0; i < clusters.size(); i++)
-               {
-                   cv::Scalar colour;
-                   cv::Mat temp;
-                   switch (i)
-                   {
-                       case 0: colour = CV_RGB(0, 0, 255); break;
-                       case 1: colour = CV_RGB(0, 255, 0); break;
-                       case 2: colour = CV_RGB(255, 0, 0); break;
-                       case 3: colour = CV_RGB(255, 0, 255); break;
-                       case 4: colour = CV_RGB(255, 255, 0); break;
-                       case 5: colour = CV_RGB(0, 255, 255); break;
-                       default: colour = CV_RGB(0, 0, 255);break;
-                   }
-                   if (i == 0)
-                   {
-               //        ofv.showOpticalFlowVectors(cv_image1->image, clustered_flow_image, clusters.at(i), pixel_step, cv::Scalar(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0,255)));
-                       ofv.showOpticalFlowVectors(cv_image1->image, clustered_flow_image, clusters.at(i), pixel_step, colour);
-                   }
-                   else
-                   {
-                       ofv.showOpticalFlowVectors(clustered_flow_image, temp, clusters.at(i), pixel_step, colour);
-                       temp.copyTo(clustered_flow_image);
-                   }
-               }
-
-
-               cv_bridge::CvImage clustered_flow_image_msg;
-               clustered_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-               clustered_flow_image_msg.image = clustered_flow_image;
-               clustered_flow_publisher.publish(clustered_flow_image_msg.toImageMsg());
-           }
-#endif
-           if (use_pointcloud)
-           {
-               pcl::PCLPointCloud2 pc2;
-               pcl_conversions::toPCL(cloud, pc2);
-
-               cv::Mat expected_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-               efc.calculateExpectedFlow(pc2, odom, projected_image, expected_flow_vectors, pixel_step);
-               ofv.showOpticalFlowVectors(cv_image1->image, cv_image->image, expected_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
-
-               cv_bridge::CvImage expected_flow_image_msg;
-               expected_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-               expected_flow_image_msg.image = cv_image->image;
-               expected_flow_publisher.publish(expected_flow_image_msg.toImageMsg());
-
-               cv::Mat difference_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-               fdc.calculateFlowDifference(optical_flow_vectors, expected_flow_vectors, difference_vectors, pixel_step);
-
-               cv::Mat compensated_optical_flow_image;
-               ofv.showOpticalFlowVectors(cv_image1->image, compensated_optical_flow_image, difference_vectors, pixel_step, CV_RGB(0, 0, 255)); 
-               
-               cv_bridge::CvImage compensated_flow_image_msg;
-               compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-               compensated_flow_image_msg.image = compensated_optical_flow_image;
-               compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
-           }
-
-           cv_bridge::CvImage optical_flow_image_msg;
-           optical_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           optical_flow_image_msg.image = optical_flow_image;
-           image_publisher.publish(optical_flow_image_msg.toImageMsg());
-           image1_publisher.publish(raw_image1);
-           image2_publisher.publish(raw_image2);
-
-
-           cv::Mat bs_contours;
-           bs.getMotionContours(cv_image2->image, bs_contours);
-           cv_bridge::CvImage bs_contours_msg;
-           bs_contours_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           bs_contours_msg.image = bs_contours;
-           background_subtraction_publisher.publish(bs_contours_msg.toImageMsg());
-        }
-
-        void testOpticalFlow()
+        if (i == 0)
         {
-
+            ofv_.showFlowClusters(image, clustered_flow_image, clusters.at(i), pixel_step_, colour);
         }
-
-        void runOpticalFlow()
+        else
         {
-           while (!image_received)
-           {
-               ros::Rate(100).sleep();
-               ros::spinOnce();
-           }
-
-           //ROS_INFO("received image");
-           
-
-           cv_bridge::CvImagePtr cv_image1;
-           cv_bridge::CvImagePtr cv_image2;
-
-           cv_image1 = cv_bridge::toCvCopy(raw_image1, "rgb8");
-           cv_image2 = cv_bridge::toCvCopy(raw_image2, "rgb8");
-
-           cv::Mat optical_flow_image;
-
-           //ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_image);
-           cv::Mat optical_flow_vectors = cv::Mat::zeros(cv::Size(cv_image1->image.cols, cv_image1->image.rows), CV_32FC4);
-           ofc.varFlow(cv_image1->image, cv_image2->image, optical_flow_image, optical_flow_vectors);
-           
-           cv_bridge::CvImage optical_flow_image_msg;
-           optical_flow_image_msg.encoding = sensor_msgs::image_encodings::BGR8;
-           optical_flow_image_msg.image = optical_flow_image;
-           image_publisher.publish(optical_flow_image_msg.toImageMsg());
-           image1_publisher.publish(raw_image1);
-           image2_publisher.publish(raw_image2);
-           image_received = false;
+            ofv_.showFlowClusters(clustered_flow_image, temp, clusters.at(i), pixel_step_, colour);
+            temp.copyTo(clustered_flow_image);
         }
-        
-        void odomCallback(const nav_msgs::Odometry &odom)
+    }
+
+    publishImage(clustered_flow_image, clustered_flow_publisher_);
+}
+
+void MotionDetectionNode::writeVectors(const cv::Mat &flow_vectors, const std::string &filename)
+{
+    ofc_.writeFlow(flow_vectors, filename, pixel_step_); 
+}
+
+void MotionDetectionNode::publishImage(const cv::Mat &image, const image_transport::Publisher &publisher)
+{
+    cv_bridge::CvImage image_msg;
+    image_msg.encoding = sensor_msgs::image_encodings::RGB8;
+    image_msg.image = image;
+    publisher.publish(image_msg.toImageMsg());
+}
+
+void MotionDetectionNode::odomCallback(const nav_msgs::Odometry &odom)
+{
+    odom_ = odom;
+    odom_received_ = true;
+}
+
+void MotionDetectionNode::cloudCallback(const sensor_msgs::PointCloud2 &cloud)
+{
+}
+
+void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
+{
+    if (first_image_received_)
+    {
+        raw_image1_ = raw_image2_;
+        raw_image2_ = image;
+
+        image_received_ = true;
+    }
+    else
+    {
+        raw_image2_ = image;
+        first_image_received_ = true;
+    }
+    if (use_all_frames_ && image_received_ == true)
+    {
+        image_received_ = true;
+        cv_bridge::CvImagePtr cv_image1;
+        cv_bridge::CvImagePtr cv_image2;
+        cv_image1 = cv_bridge::toCvCopy(raw_image1_, "rgb8");
+        cv_image2 = cv_bridge::toCvCopy(raw_image2_, "rgb8");
+        cv::Mat optical_flow_vectors;
+        cv::Mat outlier_mask;
+        std::vector<std::vector<cv::Vec4d> > clusters;
+        runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
+        detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
+        clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
+        frame_number_++;
+        if (write_vectors_)
         {
-            odom_ = odom;
-            odom_received = true;
+            std::stringstream ss;
+            ss << frame_number_;
+            std::string filename = "/home/santosh/data/frame" + ss.str();
+            writeVectors(optical_flow_vectors, filename);
         }
+    }
+}
 
-        void cloudCallback(const sensor_msgs::PointCloud2 &cloud)
-        {
-            this->cloud = cloud;
-            cloud_received = true;
-        }
 
-        void imageCallback(const sensor_msgs::ImageConstPtr &image)
-        {
-            if (first_image_received)
-            {
-                raw_image1 = raw_image2;
-                raw_image2 = image;
+void MotionDetectionNode::cameraInfoCallback(const sensor_msgs::CameraInfo &camera_info)    
+{
+    
+}
 
-                image_received = true;
-            }
-            else
-            {
-                raw_image2 = image;
-                first_image_received = true;
-            }
-        }
-
-        void cameraCallback(const sensor_msgs::CameraInfo &camera_info)
-        {
-            double matrix[3][3] = { {570.3422241210938, 0.0, 319.5}, {0.0, 570.3422241210938, 239.5}, {0.0, 0.0, 1.0} };
-            std::copy(&camera_info.K[0], &camera_info.K[0] + 9, &matrix[0][0]);
-            cv::Mat camera_matrix = cv::Mat(3, 3, CV_64F, matrix);
-
-            double rotation[3][3] = { {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0} };
-            std::copy(&camera_info.R[0], &camera_info.R[0] + 9, &rotation[0][0]);
-            cv::Mat camera_rotation_matrix = cv::Mat(3, 3, CV_64F, rotation);
-            cv::Mat camera_rotation_vector;
-            cv::Rodrigues(camera_rotation_matrix, camera_rotation_vector);
-
-            double translation[3] = {camera_info.P[3], camera_info.P[7], camera_info.P[11]};
-            cv::Mat camera_translation = cv::Mat(1, 3, CV_64F, translation);
-            
-            double distortion[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
-            std::copy(&camera_info.D[0], &camera_info.D[0] + 5, &distortion[0]);
-            cv::Mat camera_distortion = cv::Mat(1, 5, CV_64F, distortion);
-
-            efc.setCameraParameters(camera_matrix, camera_translation, camera_rotation_vector, camera_distortion);
-            camera_params_set = true;
-        }
-
-    private:
-        ros::NodeHandle nh_;
-        image_transport::ImageTransport it_;
-        ros::Subscriber cloud_subscriber;
-        ros::Subscriber camera_info_subscriber;
-        ros::Subscriber odom_subscriber;
-        image_transport::Subscriber image_subscriber;
-        image_transport::Publisher image_publisher;
-        image_transport::Publisher image1_publisher;
-        image_transport::Publisher image2_publisher;
-        image_transport::Publisher expected_flow_publisher;
-        image_transport::Publisher compensated_flow_publisher;
-        image_transport::Publisher clustered_flow_publisher;
-        image_transport::Publisher background_subtraction_publisher;
-        bool cloud_received;
-        bool image_received;
-        bool odom_received;        
-        bool first_image_received;
-        bool camera_params_set;
-        bool first_run;
-        bool use_odom;
-        bool use_pointcloud;
-        bool record_video;
-
-        sensor_msgs::PointCloud2 cloud;
-        sensor_msgs::ImageConstPtr raw_image1;
-        sensor_msgs::ImageConstPtr raw_image2;
-        nav_msgs::Odometry odom_;
-        nav_msgs::Odometry prev_odom_;
-        OpticalFlowCalculator ofc;
-        ExpectedFlowCalculator efc;
-        FlowClusterer fc;
-        FlowDifferenceCalculator fdc;
-        OpticalFlowVisualizer ofv;
-        BackgroundSubtractor bs;
-        FlowNeighbourSimilarityCalculator fs;
-
-        cv::VideoWriter output_cap;
-
-        cv::RNG rng;
-
-};
 int main(int argc, char **argv)
 {  
     ros::init(argc, argv, "motion_detection");
@@ -393,15 +201,12 @@ int main(int argc, char **argv)
     ROS_INFO("[motion_detection] node started");
 
     MotionDetectionNode mdn(n); 
+    ros::spin();
+    /*
     while(ros::ok())
     {
-   //     mdn.runOpticalFlow();
-        double start_time = (double)clock() / CLOCKS_PER_SEC;
-        mdn.runExpectedFlow();
-        double end_time = (double)clock() / CLOCKS_PER_SEC;
-        //std::cout << "Time: " << (end_time - start_time); 
-        //ROS_INFO("time %.2f", (end_time - start_time));
     }
+    */
 
     return 0;
 }

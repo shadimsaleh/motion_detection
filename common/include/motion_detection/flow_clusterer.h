@@ -14,6 +14,6 @@ class FlowClusterer
 
         std::vector<cv::Point2f> getClustersCenters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold);
 
-        std::vector<cv::Mat> getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold);
+        std::vector<std::vector<cv::Vec4d> > getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold);
 };
 #endif
