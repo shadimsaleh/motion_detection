@@ -12,7 +12,7 @@ OpticalFlowVisualizer::~OpticalFlowVisualizer()
 {    
 }
 
-void OpticalFlowVisualizer::showOpticalFlowVectors(const cv::Mat &original_image, cv::Mat &optical_flow_image, const cv::Mat &optical_flow_vectors, int pixel_step, cv::Scalar colour)
+void OpticalFlowVisualizer::showOpticalFlowVectors(const cv::Mat &original_image, cv::Mat &optical_flow_image, const cv::Mat &optical_flow_vectors, int pixel_step, cv::Scalar colour, double min_vector_size)
 {
 
     original_image.copyTo(optical_flow_image);
@@ -26,7 +26,7 @@ void OpticalFlowVisualizer::showOpticalFlowVectors(const cv::Mat &original_image
 
             cv::Vec4d elem = optical_flow_vectors.at<cv::Vec4d>(i, j);
 
-            if ((std::abs(elem[2])> 1.0 || std::abs(elem[3]) > 1.0) && std::abs(elem[2]) < pixel_step*5 && std::abs(elem[3]) < pixel_step*5) 
+            if ((std::abs(elem[2])> min_vector_size || std::abs(elem[3]) > min_vector_size) && std::abs(elem[2]) < pixel_step*5 && std::abs(elem[3]) < pixel_step*5) 
             {
 
                 start_point.x = elem[0];
@@ -62,9 +62,11 @@ void OpticalFlowVisualizer::showOpticalFlowVectors(const cv::Mat &original_image
     }
 }
 
-void OpticalFlowVisualizer::showFlowClusters(const cv::Mat &original_image, cv::Mat &optical_flow_image, const std::vector<cv::Vec4d> &optical_flow_vectors, int pixel_step,  cv::Scalar colour)
+void OpticalFlowVisualizer::showFlowClusters(const cv::Mat &original_image, cv::Mat &optical_flow_image, const std::vector<cv::Vec4d> &optical_flow_vectors, int pixel_step,  cv::Scalar colour, double min_vector_size)
 {
     original_image.copyTo(optical_flow_image);
+
+    std::vector<cv::Point> points;
 
     for (int i = 0; i < optical_flow_vectors.size(); i++)
     {
@@ -73,11 +75,15 @@ void OpticalFlowVisualizer::showFlowClusters(const cv::Mat &original_image, cv::
 
         cv::Vec4d elem = optical_flow_vectors.at(i);
 
-        if ((std::abs(elem[2])> 1.0 || std::abs(elem[3]) > 1.0) && std::abs(elem[2]) < pixel_step*5 && std::abs(elem[3]) < pixel_step*5) 
+        if ((std::abs(elem[2])> min_vector_size || std::abs(elem[3]) > min_vector_size) && std::abs(elem[2]) < pixel_step*5 && std::abs(elem[3]) < pixel_step*5) 
         {
 
             start_point.x = elem[0];
-            start_point.y = elem[1];            
+            start_point.y = elem[1];
+            cv::Point p;
+            p.x = (int)start_point.x;
+            p.y = (int)start_point.y;
+            points.push_back(p);
 
             /*
 
@@ -106,7 +112,19 @@ void OpticalFlowVisualizer::showFlowClusters(const cv::Mat &original_image, cv::
             cv::line(optical_flow_image, end_point, arrow2_end, colour, 1, CV_AA, 0);
         }
     }
-
+    if (!points.empty())
+    {
+        cv::Mat points_mat(points);
+        std::vector<std::vector<cv::Point> > hull(1);
+        cv::convexHull(points_mat, hull[0], false);
+        /*
+        for (int i = 0; i < hull[0].size(); i++)
+        {
+            std::cout << hull[i] << std::endl;
+        }
+        */
+        cv::drawContours(optical_flow_image, hull, -1, colour, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
+    }
 }
 
 void OpticalFlowVisualizer::showFlowOutliers(const cv::Mat &original_image, cv::Mat &outlier_image, const cv::Mat &optical_flow_vectors, const cv::Mat &outlier_mask, int pixel_step, bool print)
@@ -146,12 +164,13 @@ void OpticalFlowVisualizer::showFlowOutliers(const cv::Mat &original_image, cv::
                 if (outlier_mask.at<double>(i,j) > 0.5)
                 {
                     colour = CV_RGB(0, 0, 255);
-                }
+/*                }
                 else
                 {
                     colour = CV_RGB(0, 255, 0);
                 }
 
+                */
                 cv::line(outlier_image, start_point, end_point, colour, 1, CV_AA, 0);
 
                 double backward_angle = atan2(start_point.y - end_point.y, start_point.x - end_point.x);
@@ -168,6 +187,7 @@ void OpticalFlowVisualizer::showFlowOutliers(const cv::Mat &original_image, cv::
 
                 cv::line(outlier_image, end_point, arrow1_end, colour, 1, CV_AA, 0);
                 cv::line(outlier_image, end_point, arrow2_end, colour, 1, CV_AA, 0);
+            }
             }
         }
     }

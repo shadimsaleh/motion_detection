@@ -27,6 +27,7 @@ MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh),
     nh_.param<bool>("use_all_frames", use_all_frames_, false);
     nh_.param<bool>("write_vectors", write_vectors_, false);
     nh_.param<bool>("include_zeros", include_zeros_, false);
+    nh_.param<double>("min_vector_size", min_vector_size_, 1.0);
 
     of_image_publisher_ = it_.advertise("optical_flow_image", 1);
     image1_publisher_ = it_.advertise("image1", 1);
@@ -59,8 +60,8 @@ void MotionDetectionNode::runOpticalFlow(const cv::Mat &image1, const cv::Mat &i
     cv::Mat optical_flow_image;
 
     optical_flow_vectors = cv::Mat::zeros(image1.rows, image1.cols, CV_32FC4);
-    int num_vectors = ofc_.calculateOpticalFlow(image1, image2, optical_flow_vectors, pixel_step_, debug_image);
-    ofv_.showOpticalFlowVectors(image1, optical_flow_image, optical_flow_vectors, pixel_step_, CV_RGB(0, 0, 255));
+    int num_vectors = ofc_.calculateOpticalFlow(image1, image2, optical_flow_vectors, pixel_step_, debug_image, min_vector_size_);
+    ofv_.showOpticalFlowVectors(image1, optical_flow_image, optical_flow_vectors, pixel_step_, CV_RGB(0, 0, 255), min_vector_size_);
 
     publishImage(optical_flow_image, of_image_publisher_);
     if (record_video_)
@@ -78,6 +79,47 @@ void MotionDetectionNode::detectOutliers(const cv::Mat &original_image, const cv
     ofv_.showFlowOutliers(original_image, outlier_image, optical_flow_vectors, outlier_mask, pixel_step_, false); 
 
     publishImage(outlier_image, compensated_flow_publisher_);
+
+    cv::Mat outlier_vectors;
+    od_.getOutlierVectors(optical_flow_vectors, outlier_mask, outlier_vectors, pixel_step_);
+    std::vector<std::vector<cv::Vec4d> > clusters;
+
+    double distance_threshold, angular_threshold;
+    nh_.getParam("distance_threshold", distance_threshold);
+    nh_.getParam("angular_threshold", angular_threshold);
+    clusters = fc_.getClusters(outlier_vectors, pixel_step_, distance_threshold, angular_threshold);
+
+    cv::Mat clustered_flow_image;
+    original_image.copyTo(clustered_flow_image);
+
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        cv::Scalar colour;
+        cv::Mat temp;
+        switch (i)
+        {
+            case 0: colour = CV_RGB(0, 0, 255); break;
+            case 1: colour = CV_RGB(0, 255, 0); break;
+            case 2: colour = CV_RGB(255, 0, 0); break;
+            case 3: colour = CV_RGB(255, 0, 255); break;
+            case 4: colour = CV_RGB(255, 255, 0); break;
+            case 5: colour = CV_RGB(0, 255, 255); break;
+            default: colour = CV_RGB(0, 0, 255);break;
+        }
+
+        if (i == 0)
+        {
+            ofv_.showFlowClusters(original_image, clustered_flow_image, clusters.at(i), pixel_step_, colour, min_vector_size_);
+        }
+        else
+        {
+            ofv_.showFlowClusters(clustered_flow_image, temp, clusters.at(i), pixel_step_, colour, min_vector_size_);
+            temp.copyTo(clustered_flow_image);
+        }
+    }
+
+    publishImage(clustered_flow_image, clustered_flow_publisher_);
+
 }
 
 void MotionDetectionNode::clusterFlow(const cv::Mat &image, const cv::Mat &flow_vectors, std::vector<std::vector<cv::Vec4d> > &clusters)
@@ -113,11 +155,11 @@ void MotionDetectionNode::clusterFlow(const cv::Mat &image, const cv::Mat &flow_
 
         if (i == 0)
         {
-            ofv_.showFlowClusters(image, clustered_flow_image, clusters.at(i), pixel_step_, colour);
+            ofv_.showFlowClusters(image, clustered_flow_image, clusters.at(i), pixel_step_, colour, min_vector_size_);
         }
         else
         {
-            ofv_.showFlowClusters(clustered_flow_image, temp, clusters.at(i), pixel_step_, colour);
+            ofv_.showFlowClusters(clustered_flow_image, temp, clusters.at(i), pixel_step_, colour, min_vector_size_);
             temp.copyTo(clustered_flow_image);
         }
     }
@@ -174,7 +216,7 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         std::vector<std::vector<cv::Vec4d> > clusters;
         runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
         detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
-        clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
+        //clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
         frame_number_++;
         if (write_vectors_)
         {
@@ -184,6 +226,37 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
             writeVectors(optical_flow_vectors, filename);
         }
     }
+}
+
+void MotionDetectionNode::run()
+{
+    while ((!cloud_received_ && use_pointcloud_) || !image_received_ || (!camera_params_set_ && use_pointcloud_) || (!odom_received_ && use_odom_))
+    {
+        ros::Rate(100).sleep();
+        ros::spinOnce();
+    }
+    image_received_ = false;
+    frame_number_++;
+    cv_bridge::CvImagePtr cv_image1;
+    cv_bridge::CvImagePtr cv_image2;
+    cv_image1 = cv_bridge::toCvCopy(raw_image1_, "rgb8");
+    cv_image2 = cv_bridge::toCvCopy(raw_image2_, "rgb8");
+
+    cv::Mat optical_flow_vectors;
+    cv::Mat outlier_mask;
+    std::vector<std::vector<cv::Vec4d> > clusters;
+    runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
+    detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
+    //clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
+    frame_number_++;
+    if (write_vectors_)
+    {
+        std::stringstream ss;
+        ss << frame_number_;
+        std::string filename = "/home/santosh/data/frame" + ss.str();
+        writeVectors(optical_flow_vectors, filename);
+    }
+
 }
 
 
@@ -198,15 +271,23 @@ int main(int argc, char **argv)
 
     ros::NodeHandle n("~");
 
+    bool use_all_frames;
+    n.param<bool>("use_all_frames", use_all_frames, true);
+
     ROS_INFO("[motion_detection] node started");
 
     MotionDetectionNode mdn(n); 
-    ros::spin();
-    /*
-    while(ros::ok())
+    if (use_all_frames)
     {
+        ros::spin();
     }
-    */
+    else
+    {
+        while(ros::ok())
+        {
+            mdn.run();
+        }
+    }
 
     return 0;
 }

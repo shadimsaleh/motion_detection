@@ -20,6 +20,7 @@ class MotionDetectionNode
         MotionDetectionNode(ros::NodeHandle &nh);
         virtual ~MotionDetectionNode();
 
+        void run();
         void writeVectors(const cv::Mat &flow_vectors, const std::string &filename);
         void publishImage(const cv::Mat &image, const image_transport::Publisher &publisher);
         void odomCallback(const nav_msgs::Odometry &odom);
@@ -59,6 +60,7 @@ class MotionDetectionNode
         bool write_vectors_;
         bool include_zeros_;
         int pixel_step_;
+        double min_vector_size_;
 
         sensor_msgs::PointCloud2 cloud_;
         sensor_msgs::ImageConstPtr raw_image1_;

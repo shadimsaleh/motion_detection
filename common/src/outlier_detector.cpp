@@ -28,6 +28,24 @@ void OutlierDetector::findOutliers(const cv::Mat &optical_flow_vectors, cv::Mat 
     //if (print) std::cout << " Mask magn " << std::endl << outlier_probabilities << std::endl;
 }
 
+void OutlierDetector::getOutlierVectors(const cv::Mat &optical_flow_vectors, const cv::Mat &outlier_probabilities, cv::Mat &outlier_vectors, int pixel_step)
+{
+
+    outlier_vectors = cv::Mat::zeros(optical_flow_vectors.rows, optical_flow_vectors.cols, CV_32FC4);
+    for (int i = 0; i < optical_flow_vectors.rows; i = i + pixel_step)
+    {
+        for (int j = 0; j < optical_flow_vectors.cols; j = j + pixel_step)
+        {
+            if (outlier_probabilities.at<double>(i, j) > 0.5)
+            {
+                cv::Vec4d orig_vec = optical_flow_vectors.at<cv::Vec4d>(i, j);
+                cv::Vec4d &out_vec = outlier_vectors.at<cv::Vec4d>(i, j);
+                for (int i = 0; i < 4; i++) out_vec[i] = orig_vec[i];                    
+            }
+        }
+    }
+}
+
 void OutlierDetector::createAngleMatrix(const cv::Mat &optical_flow_vectors, cv::Mat &angle_matrix, int pixel_step)
 {
     for (int i = 0; i < optical_flow_vectors.rows; i = i + pixel_step)

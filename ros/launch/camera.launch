@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node name="head_camera" pkg="usb_cam" type="usb_cam_node" output="screen" >
+        <param name="video_device" value="/dev/video1" />
+        <param name="image_width" value="320" />
+        <param name="image_height" value="240" />
+        <param name="pixel_format" value="yuyv" />
+        <param name="autofocus" type="bool" value="true" />
+        <param name="camera_frame_id" value="head_camera_tf" />
+        <param name="io_method" value="mmap"/>
+    </node>
+    
+
+    <node pkg="motion_detection" type="motion_detection" name="motion_detection" output="screen" respawn="false">
+        <remap from="~input_image" to="/head_camera/image_raw"/>        
+        <remap from="~input_pointcloud" to="/tower_cam3d/depth_registered/points"/>        
+        <remap from="~input_camerainfo" to="/head_camera/camera_info"/>        
+
+        <param name="x_trans" type="double" value="0.0" />
+        <param name="y_trans" type="double" value="-0.01" />
+        <param name="z_trans" type="double" value="0.1" />
+        <param name="roll"    type="double" value="0.0" />
+        <param name="pitch"   type="double" value="0.0" />
+        <param name="yaw"     type="double" value="0.0" />
+        <param name="use_odom" type="bool" value="false" />
+        <param name="use_pointcloud" type="bool" value="false" />
+        <param name="record_video" type="bool" value="false" />       
+        <param name="use_all_frames" type="bool" value="true" />
+        <param name="write_vectors" type="bool" value="false" />
+        <param name="include_zeros" type="bool" value="true" />
+
+        <param name="pixel_step" type="int" value="10" />
+        <param name="distance_threshold" type="double" value="50.0" />
+        <param name="angular_threshold" type="double" value="0.15" />
+
+    </node>
+
+    <node name="expected_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/expected_flow_image"/>
+    </node>
+
+    <node name="optical_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/optical_flow_image"/>
+    </node>
+
+    <node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/compensated_flow_image"/>
+    </node>
+
+    <node name="clustered_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/clustered_flow_image"/>
+    </node>
+
+    <node name="background_subtraction_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+        <remap from="image" to="/motion_detection/background_subtraction_image"/>
+    </node>
+</launch>

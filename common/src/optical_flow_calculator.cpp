@@ -19,7 +19,7 @@ OpticalFlowCalculator::~OpticalFlowCalculator()
 
 }
 
-int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step, cv::Mat &comp)
+int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step, cv::Mat &comp, double min_vector_size)
 {
     /*
     const int MAX_LEVEL = 2;
@@ -75,7 +75,7 @@ int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv:
             cv::Point2f end_point = points_image2.at(i);
             float x_diff = end_point.x - start_point.x;
             float y_diff = end_point.y - start_point.y;
-            if (std::abs(x_diff) > 1.0 || std::abs(y_diff) > 1.0) // THIS USED TO BE 1.0
+            if (std::abs(x_diff) > min_vector_size || std::abs(y_diff) > min_vector_size) // THIS USED TO BE 1.0
             {
                 cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
                 elem[0] = start_point.x;

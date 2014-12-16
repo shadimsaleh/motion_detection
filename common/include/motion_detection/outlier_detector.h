@@ -10,8 +10,9 @@ class OutlierDetector
         virtual ~OutlierDetector();
 
         void findOutliers(const cv::Mat &optical_flow_vectors, cv::Mat &outlier_probabilities, bool include_zeros, int pixel_step, bool print);
+        void getOutlierVectors(const cv::Mat &optical_flow_vectors, const cv::Mat &outlier_probabilities, cv::Mat &outlier_vectors, int pixel_step);
 
-    private:
+        private:
         void createMask(const cv::Mat &optical_flow_vectors, const cv::Mat &values, cv::Mat &mask, bool include_zeros, int pixel_step, bool print);
         void createAngleMatrix(const cv::Mat &optical_flow_vectors, cv::Mat &angle_matrix, int pixel_step);
         void createMagnitudeMatrix(const cv::Mat &optical_flow_vectors, cv::Mat &magnitude_matrix, int pixel_step);

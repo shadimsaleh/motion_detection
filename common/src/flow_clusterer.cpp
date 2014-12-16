@@ -142,7 +142,8 @@ std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &f
 //        cv::Mat cluster_points(clusters.at(i).getCluster(), true);
         if (clusters.at(i).size() > 5)
         {
-            mat_clusters.push_back(clusters.at(i).getMeanVector());
+            //mat_clusters.push_back(clusters.at(i).getMeanVector());
+            mat_clusters.push_back(clusters.at(i).getCluster());
         }
     }
     /*
