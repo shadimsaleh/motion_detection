@@ -192,3 +192,19 @@ void OpticalFlowVisualizer::showFlowOutliers(const cv::Mat &original_image, cv::
         }
     }
 }
+
+void OpticalFlowVisualizer::showClusterContours(const cv::Mat &original_image, cv::Mat &clusters_image, const std::vector<std::vector<cv::Point2f> > &clusters)
+{
+    cv::Scalar colour = CV_RGB(0, 0, 255);
+    original_image.copyTo(clusters_image);
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        std::vector<std::vector<cv::Point> > hull(1);
+        std::vector<cv::Point2f> cluster = clusters.at(i);
+        std::vector<cv::Point> clusteri;
+        cv::Mat(cluster).copyTo(clusteri);
+        cv::Mat points_mat(clusteri);
+        cv::convexHull(points_mat, hull[0], false);
+        cv::drawContours(clusters_image, hull, -1, colour, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
+    }
+}

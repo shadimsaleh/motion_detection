@@ -12,6 +12,7 @@ find_package(catkin REQUIRED
 )
 find_package(PCL 1.7 REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(Eigen REQUIRED)
 
 
 catkin_package(
@@ -25,6 +26,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${EIGEN_INCLUDE_DIRS}
 )
 
 #...: gnu++0x
@@ -49,6 +51,7 @@ add_executable(motion_detection
   common/src/flow_difference_calculator.cpp
   common/src/optical_flow_visualizer.cpp
   common/src/vector_cluster.cpp
+  common/src/point_cluster.cpp
   common/src/background_subtractor.cpp
   common/src/flow_neighbour_similarity_calculator.cpp
   common/src/outlier_detector.cpp

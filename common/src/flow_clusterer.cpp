@@ -1,5 +1,6 @@
 #include <motion_detection/flow_clusterer.h>
 #include <motion_detection/vector_cluster.h>
+#include <motion_detection/point_cluster.h>
 #include <opencv2/flann/flann_base.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
@@ -108,7 +109,7 @@ std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_v
 std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
 {
     std::vector<VectorCluster> clusters;
-    for (int i = 0; i < flow_vectors.rows; i = i + pixel_step)
+    for (int i = 0; i < flow_vectors.rows; i = i + pixel_step) 
     {
         for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
         {
@@ -116,17 +117,27 @@ std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &f
             if (std::abs(vec[2]) > 0.0 || std::abs(vec[3]) > 0.0)
             {
                 bool added = false;
+                int index = -1;
+                
+                // TODO: test this, find best weighting for distance and angle
+                double best_score = std::numeric_limits<double>::max();
+                double closest_distance = std::numeric_limits<double>::max();
+                double closest_angle = std::numeric_limits<double>::max();
                 for (int k = 0; k < clusters.size(); k++)
                 {
-                    if (clusters.at(k).getClosestDistance(vec) < distance_threshold && 
-                        clusters.at(k).getClosestOrientation(vec) < angular_threshold)
+                    double distance = clusters.at(k).getClosestDistance(vec);
+                    double angle = clusters.at(k).getClosestOrientation(vec);
+                    if ((distance + angle * 10.0) < best_score)
                     {
-                        clusters.at(k).addVector(vec);
-                        added = true;
-                        break;
+                        best_score = (distance + angle * 10.0);
+                        index = k;
                     }
                 }
-                if (!added)
+                if (index != -1 && closest_distance < distance_threshold && closest_angle < angular_threshold)
+                {
+                    clusters.at(index).addVector(vec);
+                }
+                else
                 {
                     VectorCluster vc;
                     vc.addVector(vec);
@@ -156,3 +167,42 @@ std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &f
     return mat_clusters;
 }
 
+std::vector<std::vector<cv::Point2f>> FlowClusterer::clusterEuclidean(const std::vector<cv::Point2f> &points, double distance_threshold)
+{
+    std::vector<PointCluster> clusters;
+    for (int i = 0; i < points.size(); i++)
+    {
+        cv::Point2f point = points.at(i);
+        bool added = false;
+        double closest_distance = std::numeric_limits<double>::max(); 
+        int index = -1;
+        for (int k = 0; k < clusters.size(); k++)
+        {
+            double distance = clusters.at(k).getClosestDistance(point);
+            if (distance < closest_distance)
+            {
+                closest_distance = distance;
+                index = k;
+            }
+        }
+        if (index != -1 && closest_distance < distance_threshold)
+        {
+            clusters.at(index).addPoint(point);
+        }
+        else
+        {
+            PointCluster pc;
+            pc.addPoint(point);
+            clusters.push_back(pc);
+        }
+    }
+    std::vector<std::vector<cv::Point2f> > mat_clusters;    
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        if (clusters.at(i).size() > 5)
+        {
+            mat_clusters.push_back(clusters.at(i).getCluster());
+        }
+    }
+    return mat_clusters;
+}

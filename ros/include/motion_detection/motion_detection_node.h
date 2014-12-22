@@ -21,7 +21,6 @@ class MotionDetectionNode
         virtual ~MotionDetectionNode();
 
         void run();
-        void writeVectors(const cv::Mat &flow_vectors, const std::string &filename);
         void publishImage(const cv::Mat &image, const image_transport::Publisher &publisher);
         void odomCallback(const nav_msgs::Odometry &odom);
         void cloudCallback(const sensor_msgs::PointCloud2 &cloud);
@@ -29,7 +28,10 @@ class MotionDetectionNode
         void cameraInfoCallback(const sensor_msgs::CameraInfo &camera_info);
         
     private:
+        void writeVectors(const cv::Mat &flow_vectors, const std::string &filename);
+        void writeTrajectories(const std::vector<std::vector<cv::Point2f> > &trajectories, const std::string &filename);
         void runOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors);
+        void runOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, std::vector<std::vector<cv::Point2f> > &trajectories);
         void clusterFlow(const cv::Mat &image, const cv::Mat &flow_vectors, std::vector<std::vector<cv::Vec4d> > &clusters);
 
         void detectOutliers(const cv::Mat &original_image, const cv::Mat &optical_flow_vectors, cv::Mat &outlier_mask, bool include_zeros);
@@ -58,11 +60,15 @@ class MotionDetectionNode
         bool record_video_;
         bool use_all_frames_;
         bool write_vectors_;
+        bool write_trajectories_;
         bool include_zeros_;
         int pixel_step_;
         double min_vector_size_;
+        int trajectory_size_;
+        int global_frame_count_;
 
         sensor_msgs::PointCloud2 cloud_;
+        std::list<sensor_msgs::ImageConstPtr> raw_images_;
         sensor_msgs::ImageConstPtr raw_image1_;
         sensor_msgs::ImageConstPtr raw_image2_;
         nav_msgs::Odometry odom_;
