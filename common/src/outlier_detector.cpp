@@ -7,6 +7,19 @@
 OutlierDetector::OutlierDetector()
 {
     srand (time(NULL));
+    // TODO: read this from a file
+    std::vector<double> p99;
+    p99.push_back(0.0);
+    p99.push_back(0.020);
+    p99.push_back(0.115);
+    p99.push_back(0.297);
+    p99.push_back(0.554);
+    p99.push_back(0.872);
+    p99.push_back(1.239);
+    p99.push_back(1.646);
+    p99.push_back(2.088);
+    p99.push_back(2.558);
+    chi_square_table.push_back(p99);
 }
 
 OutlierDetector::~OutlierDetector()
@@ -212,7 +225,7 @@ std::vector<int> fillSubset(const Eigen::MatrixXf &data, Eigen::MatrixXf &subset
     return column_indices;
 }
 
-std::vector<std::vector<cv::Point2f> > OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &trajectories, std::vector<cv::Point2f> &outlier_points, int num_motions, double residual_threshold)
+std::vector<std::vector<cv::Point2f> > OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &trajectories, std::vector<cv::Point2f> &outlier_points, int num_motions, double sigma)
 {
     bool print = false;
     int subspace_dimensions = trajectories[0].size() * 2; // n
@@ -227,7 +240,6 @@ std::vector<std::vector<cv::Point2f> > OutlierDetector::fitSubspace(const std::v
 
     int num_sample_points = 4 * num_motions; // d
     int num_iterations = 50;
-    double sigma = 0.5;
     
     Eigen::VectorXf final_residual;
     std::vector<int> final_columns;
@@ -289,7 +301,12 @@ std::vector<std::vector<cv::Point2f> > OutlierDetector::fitSubspace(const std::v
     }
     if (print) std::cout << "final residual " << std::endl;
     if (print) std::cout << final_residual << std::endl;
-
+    double residual_threshold = 0.2;
+    if (subspace_dimensions - num_sample_points < 11 && subspace_dimensions - num_sample_points > 0)
+    {
+        residual_threshold = sigma * sigma * chi_square_table.at(0).at(subspace_dimensions - num_sample_points);
+        std::cout << "residual threshold: " << residual_threshold << std::endl;
+    }
     for (int idx = 0; idx < final_residual.size(); idx++)
     {
         if (final_residual(idx) > residual_threshold)

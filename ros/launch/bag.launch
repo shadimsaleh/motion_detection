@@ -25,7 +25,7 @@
         <param name="distance_threshold" type="double" value="50.0" />
         <param name="angular_threshold" type="double" value="0.15" />
         <!-- subspace fitting -->
-        <param name="residual_threshold" type="double" value="0.3" />
+        <param name="sigma" type="double" value="0.5" />
         <param name="num_motions" type="int" value="2" />
 
     </node>

@@ -267,12 +267,12 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         //runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
         runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories);
         std::vector<cv::Point2f> outlier_points;
-        double residual_threshold;
-        nh_.param<double>("residual_threshold", residual_threshold, 0.2);
+        double sigma;
+        nh_.param<double>("sigma", sigma, 0.5);
         int num_motions;
         nh_.param<int>("num_motions", num_motions, 2);
         std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
-        trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, 2, residual_threshold);
+        trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, num_motions, sigma);
 
         cv::Mat trajectory_image;
         tv_.showTrajectories(cv_images.back(), trajectory_image, trajectory_subspace_vectors);
