@@ -13,6 +13,7 @@
 #include <motion_detection/background_subtractor.h>
 #include <motion_detection/flow_neighbour_similarity_calculator.h>
 #include <motion_detection/outlier_detector.h>
+#include <motion_detection/trajectory_visualizer.h>
 
 class MotionDetectionNode
 {
@@ -78,6 +79,7 @@ class MotionDetectionNode
         FlowClusterer fc_;
         FlowDifferenceCalculator fdc_;
         OpticalFlowVisualizer ofv_;
+        TrajectoryVisualizer tv_;
         BackgroundSubtractor bs_;
         FlowNeighbourSimilarityCalculator fs_;
         OutlierDetector od_;

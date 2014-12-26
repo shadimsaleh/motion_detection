@@ -199,17 +199,20 @@ void meanSubtract(Eigen::MatrixXf &data)
     }
 }
 
-void fillSubset(const Eigen::MatrixXf &data, Eigen::MatrixXf &subset, int num_columns)
+std::vector<int> fillSubset(const Eigen::MatrixXf &data, Eigen::MatrixXf &subset, int num_columns)
 {
+    std::vector<int> column_indices;
     for(int i = 0; i < num_columns; i++)
     {
         int column_number = rand() % data.cols();
+        column_indices.push_back(column_number);
         subset.col(i) = data.col(column_number);        
         //subset.col(i) = data.col(100 + i);        
     }
+    return column_indices;
 }
 
-void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &trajectories, std::vector<cv::Point2f> &outlier_points, int num_motions, double residual_threshold)
+std::vector<std::vector<cv::Point2f> > OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &trajectories, std::vector<cv::Point2f> &outlier_points, int num_motions, double residual_threshold)
 {
     bool print = false;
     int subspace_dimensions = trajectories[0].size() * 2; // n
@@ -227,6 +230,7 @@ void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &
     double sigma = 0.5;
     
     Eigen::VectorXf final_residual;
+    std::vector<int> final_columns;
     int max_points = 0;
 
     if (print) std::cout << " start iterations " << std::endl;
@@ -234,7 +238,8 @@ void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &
     {
         Eigen::MatrixXf subset(subspace_dimensions, num_sample_points); 
         if (print) std::cout << "file subset " << std::endl;
-        fillSubset(data, subset, num_sample_points);
+        std::vector<int> column_indices;
+        column_indices = fillSubset(data, subset, num_sample_points);
 
         if (print) std::cout << "svd calculation " << std::endl;
 //        Eigen::JacobiSVD<Eigen::MatrixXf> svd(subset, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -278,6 +283,7 @@ void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &
             if (print) std::cout << "copy residual" << residual << std::endl;
             max_points = num_points;
             final_residual = residual;
+            final_columns = column_indices;
             if (print) std::cout << "copy final residual " << final_residual << std::endl;
         }
     }
@@ -291,4 +297,10 @@ void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &
             outlier_points.push_back(trajectories.at(idx).at(trajectories.at(idx).size() - 2));
         }
     }
+    std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
+    for (int i = 0; i < final_columns.size(); i++)
+    {
+        trajectory_subspace_vectors.push_back(trajectories.at(final_columns.at(i)));
+    }
+    return trajectory_subspace_vectors;
 }

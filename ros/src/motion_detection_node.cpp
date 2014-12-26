@@ -271,21 +271,18 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         nh_.param<double>("residual_threshold", residual_threshold, 0.2);
         int num_motions;
         nh_.param<int>("num_motions", num_motions, 2);
-        od_.fitSubspace(trajectories, outlier_points, 2, residual_threshold); 
+        std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
+        trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, 2, residual_threshold);
+
+        cv::Mat trajectory_image;
+        tv_.showTrajectories(cv_images.back(), trajectory_image, trajectory_subspace_vectors);
+        // TODO: rename the publisher
+        publishImage(trajectory_image, background_subtraction_publisher_);
+
         double distance_threshold;
         nh_.getParam("distance_threshold", distance_threshold);
         clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
-        /*
-        std::cout << "clusters" << clusters.size() << std::endl;
-        for (int i = 0; i < clusters.size(); i++)
-        {
-            std::cout << "size: " << clusters.at(i).size() << std::endl;
-            for (int j = 0; j < clusters.at(i).size(); j++)
-            {
-                std::cout << clusters.at(i).at(j) << std::endl;
-            }
-        }
-        */
+
         cv::Mat cluster_image;
         ofv_.showClusterContours(cv_images.back(), cluster_image, clusters);
         publishImage(cluster_image, clustered_flow_publisher_);

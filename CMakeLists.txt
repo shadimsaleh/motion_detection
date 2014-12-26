@@ -50,6 +50,7 @@ add_executable(motion_detection
   common/src/flow_clusterer.cpp
   common/src/flow_difference_calculator.cpp
   common/src/optical_flow_visualizer.cpp
+  common/src/trajectory_visualizer.cpp
   common/src/vector_cluster.cpp
   common/src/point_cluster.cpp
   common/src/background_subtractor.cpp
