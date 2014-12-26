@@ -132,14 +132,14 @@ double VectorCluster::getAngle(const cv::Vec4d &vector)
 
 void VectorCluster::getMinMax(double &min_x, double &max_x, double &min_y, double &max_y)
 {
-    min_x = 10000.0;
+    min_x = std::numeric_limits<double>::max();
     max_x = -1.0;
-    min_y = 10000.0;
+    min_y = std::numeric_limits<double>::max();
     max_y = -1.0;
     for (int i = 0; i < cluster_.size(); i++)
     {
         double x = cluster_.at(i)[0];
-        double y = cluster_.at(i)[0];
+        double y = cluster_.at(i)[1];
         if (x < min_x) min_x = x;
         if (y < min_y) min_y = y;
         if (x > max_x) max_x = x;

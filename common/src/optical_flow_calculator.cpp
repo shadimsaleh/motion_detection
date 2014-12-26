@@ -121,6 +121,138 @@ int OpticalFlowCalculator::calculateOpticalFlow(const cv::Mat &image1, const cv:
     return num_vectors;
 }
 
+
+int OpticalFlowCalculator::calculateOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, 
+                                        std::vector<std::vector<cv::Point2f> > &trajectories, int pixel_step, cv::Mat &comp, double min_vector_size)
+{
+    
+    const int MAX_LEVEL = 5;
+    cv::Size winSize(40, 40);
+    std::vector<uchar> status;
+    std::vector<float> err;
+    cv::TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10, 0.03);
+
+    std::vector<std::vector<cv::Point2f> > init_traj_list; 
+
+    // initialize points we want to track
+    std::vector<cv::Point2f> points_image1;
+    std::vector<cv::Point2f> points_image2;
+    for (int i = 0; i < images[0].cols; i = i + pixel_step)
+    {
+        for (int j = 0; j < images[0].rows; j = j + pixel_step)
+        {
+            cv::Point2f point(i, j);
+            points_image1.push_back(point);
+            std::vector<cv::Point2f> traj;
+            traj.push_back(point);
+            init_traj_list.push_back(traj);
+        }
+    }
+
+    int num_vectors = 0;
+    for (int j = 0; j < images.size() - 1; j++)
+    {
+        cv::Mat gray_image1;
+        cv::Mat gray_image2;
+
+        cvtColor(images.at(j), gray_image1, CV_BGR2GRAY);
+        cvtColor(images.at(j+1), gray_image2, CV_BGR2GRAY);
+
+        std::vector<cv::Mat> pyramids;
+        cv::buildOpticalFlowPyramid(gray_image1, pyramids, winSize, MAX_LEVEL, true);
+
+        cv::calcOpticalFlowPyrLK(pyramids, gray_image2, points_image1, points_image2, status, err, winSize, MAX_LEVEL, termcrit, 0, 0.001);
+
+
+        std::vector<cv::Point2f> temp;
+        
+        int found_vectors = 0;
+        for (int i = 0; i < points_image2.size(); i++)
+        {
+            if (status[i])
+            {
+                found_vectors++;
+                if (j == images.size() - 2)
+                {
+                    cv::Point2f start_point = points_image1.at(i);
+                    cv::Point2f end_point = points_image2.at(i);
+                    float x_diff = end_point.x - start_point.x;
+                    float y_diff = end_point.y - start_point.y;
+                    if (std::abs(x_diff) > min_vector_size || std::abs(y_diff) > min_vector_size) // THIS USED TO BE 1.0
+                    {
+                        cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                        elem[0] = start_point.x;
+                        elem[1] = start_point.y;
+                        elem[2] = x_diff;
+                        elem[3] = y_diff;
+                        num_vectors++;
+                    }
+                    else
+                    {
+                        cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                        elem[0] = start_point.x;
+                        elem[1] = start_point.y;
+                        elem[2] = 0.0;
+                        elem[3] = 0.0;
+                    }
+                }
+                if (points_image2.at(i).x > 10.0 && points_image2.at(i).y > 10.0
+                    && points_image2.at(i).x < images[0].cols-10 && points_image2.at(i).y < images[0].rows-10)
+                {
+                    temp.push_back(points_image2.at(i));
+                    init_traj_list.at(i).push_back(points_image2.at(i));
+                }
+                else
+                {
+                    temp.push_back(points_image1.at(i));
+                }
+            }
+            else
+            {
+                if (j == images.size() - 2)
+                {
+                    //std::cout << "in here " << std::endl;
+                    cv::Point2f start_point = points_image1.at(i);
+                    //std::cout << "start_point " << start_point.x << ", " << start_point.y << std::endl;
+                    cv::Vec4d &elem = optical_flow_vectors.at<cv::Vec4d> ((int)start_point.y, (int)start_point.x);
+                    elem[0] = -1.0;
+                    elem[1] = -1.0;
+                    elem[2] = 0.0;
+                    elem[3] = 0.0;
+                }
+                if (points_image1.at(i).x < 0.0 || points_image1.at(i).y < 0.0)
+                {
+                }
+                temp.push_back(points_image1.at(i));
+            }
+        }
+        points_image1.clear();
+        for (int xyz=0;xyz<temp.size();xyz++)
+        {
+            points_image1.push_back(temp.at(xyz));
+        }
+        points_image2.clear();
+    }
+    for (int i = 0; i < init_traj_list.size(); i++)
+    {
+        if (init_traj_list.at(i).size() == images.size())
+        {
+            trajectories.push_back(init_traj_list.at(i));
+        }
+        else 
+        {
+            //std::cout << "size: " << init_traj_list.at(i).size() << std::endl;
+        }
+    }
+    
+    return num_vectors;
+}
+
+
+
+
+
+
 int OpticalFlowCalculator::calculateCompensatedFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors, int pixel_step)
 {
     const int MAX_LEVEL = 2;
@@ -398,4 +530,25 @@ void OpticalFlowCalculator::writeFlow(const cv::Mat &optical_flow_vectors, const
     }
     hfile.close();
     vfile.close();
+}
+
+void OpticalFlowCalculator::writeTrajectories(const std::vector<std::vector<cv::Point2f> > &trajectories, const std::string &filename)
+{
+
+    ofstream tfile(filename);
+
+    for (int i = 0; i < trajectories.size(); i++)
+    {
+        std::vector<cv::Point2f> traj = trajectories.at(i);
+        for (int j = 0; j < traj.size(); j++)
+        {
+            if (j != 0)
+            {
+                tfile << ", ";                
+            }
+            tfile << traj.at(j).x << ", " << traj.at(j).y;
+        }
+        tfile << std::endl;
+    }
+    tfile.close();
 }

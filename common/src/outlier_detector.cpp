@@ -1,9 +1,12 @@
 #include <motion_detection/outlier_detector.h>
 #include <iostream>
+#include <Eigen/Dense>
+#include <cstdlib>
+#include <ctime>
 
 OutlierDetector::OutlierDetector()
 {
-
+    srand (time(NULL));
 }
 
 OutlierDetector::~OutlierDetector()
@@ -140,7 +143,7 @@ void OutlierDetector::createMask(const cv::Mat &optical_flow_vectors, const cv::
             if (include_zeros)
             {
                 double modified_z_score = 0.6745 * diff.at(index) / median_absolute_deviation;
-                if (modified_z_score > threshold)
+                if (std::abs(modified_z_score) > threshold)
                 {
                     mask.at<double>(i, j) = 1.0;
                 }
@@ -150,13 +153,142 @@ void OutlierDetector::createMask(const cv::Mat &optical_flow_vectors, const cv::
             {
                 double modified_z_score = 0.6745 * diff.at(index) / median_absolute_deviation;
                 if (print) std::cout << modified_z_score << std::endl;
-                if (modified_z_score > threshold)
+                if (std::abs(modified_z_score) > threshold)
                 {
                     mask.at<double>(i, j) = 1.0;
                     if (print) std::cout << i << ", " << j << ", " << mask.at<double>(i, j) << std::endl;
                 }
                 index++;
             }
+        }
+    }
+}
+
+void fillMatrix(const std::vector<std::vector<cv::Point2f> > &trajectories, Eigen::MatrixXf &data)
+{
+    // TODO: find a better way to do this
+    for (int i = 0; i < trajectories.size(); i++)
+    {
+        std::vector<cv::Point2f> trajectory = trajectories.at(i);
+        for (int j = 0; j < trajectory.size(); j++)
+        {
+            data(j * 2, i) = trajectory.at(j).x;     
+            data((j * 2) + 1, i) = trajectory.at(j).y;     
+        }
+    }
+}
+
+void meanSubtract(Eigen::MatrixXf &data)
+{
+    double x_sum = data.row(0).sum();
+    double y_sum = data.row(1).sum();
+    x_sum /= data.cols();
+    y_sum /= data.cols();
+    Eigen::MatrixXf xsum = Eigen::MatrixXf::Constant(1, data.cols(), x_sum); 
+    Eigen::MatrixXf ysum = Eigen::MatrixXf::Constant(1, data.cols(), y_sum); 
+    for (int i = 0; i < data.rows(); i++)
+    {
+        if (i % 2 == 0)
+        {
+            data.row(i) = data.row(i) - xsum;
+        }
+        else
+        {
+            data.row(i) = ysum - data.row(i);
+        }
+    }
+}
+
+void fillSubset(const Eigen::MatrixXf &data, Eigen::MatrixXf &subset, int num_columns)
+{
+    for(int i = 0; i < num_columns; i++)
+    {
+        int column_number = rand() % data.cols();
+        subset.col(i) = data.col(column_number);        
+        //subset.col(i) = data.col(100 + i);        
+    }
+}
+
+void OutlierDetector::fitSubspace(const std::vector<std::vector<cv::Point2f> > &trajectories, std::vector<cv::Point2f> &outlier_points, int num_motions, double residual_threshold)
+{
+    bool print = false;
+    int subspace_dimensions = trajectories[0].size() * 2; // n
+    int num_trajectories = trajectories.size();
+    // each column in data represents one trajectory
+    // even rows are x coordinates, odd rows are y coordinates
+    Eigen::MatrixXf data(subspace_dimensions, num_trajectories);
+    if (print) std::cout << "fill matrix " << std::endl;
+    fillMatrix(trajectories, data);
+    if (print) std::cout << "mean subtract " << std::endl;
+    meanSubtract(data);
+
+    int num_sample_points = 4 * num_motions; // d
+    int num_iterations = 50;
+    double sigma = 0.5;
+    
+    Eigen::VectorXf final_residual;
+    int max_points = 0;
+
+    if (print) std::cout << " start iterations " << std::endl;
+    for (int i = 0; i < num_iterations; i++)
+    {
+        Eigen::MatrixXf subset(subspace_dimensions, num_sample_points); 
+        if (print) std::cout << "file subset " << std::endl;
+        fillSubset(data, subset, num_sample_points);
+
+        if (print) std::cout << "svd calculation " << std::endl;
+//        Eigen::JacobiSVD<Eigen::MatrixXf> svd(subset, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::JacobiSVD<Eigen::MatrixXf, Eigen::FullPivHouseholderQRPreconditioner> svd(subset,  Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+        if (print) std::cout << "init Pnd " << std::endl;
+        Eigen::MatrixXf Pnd = Eigen::MatrixXf::Zero(subspace_dimensions, subspace_dimensions);
+        //std::cout << "U" << std::endl;
+        //std::cout << svd.matrixU() << std::endl;
+        //std::cout << svd.singularValues() << std::endl;
+        
+        if (print) std::cout << "calc M " << std::endl;
+        for (int idx = 0; idx < num_sample_points; idx++)
+        {
+            Eigen::VectorXf u = svd.matrixU().col(idx);
+            Eigen::MatrixXf M = u*u.transpose();
+            Pnd = Pnd + M;
+        }
+        if (print) std::cout << "calc Pnd " << std::endl;
+        Pnd = Eigen::MatrixXf::Identity(subspace_dimensions, subspace_dimensions) - Pnd;
+
+        Eigen::MatrixXf data_T = data.transpose();
+        if (print) std::cout << "calc residual " << std::endl;
+        Eigen::VectorXf residual = (data_T * (Pnd * data)).diagonal();
+        if (print) std::cout << "residual : " << std::endl;
+        if (print) std::cout << residual << std::endl;
+        residual = residual.cwiseAbs();
+        int num_points = 0;
+        for (int idx = 0; idx < residual.size(); idx++)
+        {
+            if (print) std::cout << "threshold " << (subspace_dimensions - num_sample_points) * sigma * sigma << std::endl;
+            if (residual(idx) < (subspace_dimensions - num_sample_points) * sigma * sigma)
+            {
+                if (print) std::cout << "adding  " << std::endl;
+                num_points++;
+            }
+        }
+        if (num_points > max_points)
+        {
+            if (print) std::cout << num_points << " to " << max_points << std::endl;
+            if (print) std::cout << "copy residual" << residual << std::endl;
+            max_points = num_points;
+            final_residual = residual;
+            if (print) std::cout << "copy final residual " << final_residual << std::endl;
+        }
+    }
+    if (print) std::cout << "final residual " << std::endl;
+    if (print) std::cout << final_residual << std::endl;
+
+    for (int idx = 0; idx < final_residual.size(); idx++)
+    {
+        if (final_residual(idx) > residual_threshold)
+        {
+            outlier_points.push_back(trajectories.at(idx).at(trajectories.at(idx).size() - 2));
         }
     }
 }

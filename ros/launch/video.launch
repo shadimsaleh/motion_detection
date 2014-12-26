@@ -17,32 +17,37 @@
         <param name="use_pointcloud" type="bool" value="false" />
         <param name="record_video" type="bool" value="false" />       
         <param name="use_all_frames" type="bool" value="true" />
+        <param name="skip_frames" type="int" value="1" />
         <param name="write_vectors" type="bool" value="false" />
         <param name="include_zeros" type="bool" value="true" />
+        <param name="min_vector_size" type="double" value="0.2" />
 
         <param name="pixel_step" type="int" value="10" />
         <param name="distance_threshold" type="double" value="50.0" />
         <param name="angular_threshold" type="double" value="0.15" />
 
+        <param name="residual_threshold" type="double" value="0.2" />
+        <param name="num_motions" type="int" value="4" />
+
     </node>
 
-    <node name="expected_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+    <!--node name="expected_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/expected_flow_image"/>
-    </node>
+    </node-->
 
     <node name="optical_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/optical_flow_image"/>
     </node>
 
-    <node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+    <!--node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/compensated_flow_image"/>
-    </node>
+    </node-->
 
     <node name="clustered_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/clustered_flow_image"/>
     </node>
 
-    <node name="background_subtraction_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+    <!--node name="background_subtraction_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/background_subtraction_image"/>
-    </node>
+    </node-->
 </launch>
