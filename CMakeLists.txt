@@ -56,6 +56,7 @@ add_executable(motion_detection
   common/src/background_subtractor.cpp
   common/src/flow_neighbour_similarity_calculator.cpp
   common/src/outlier_detector.cpp
+  common/src/motion_logger.cpp
   common/src/VarFlow.cpp
   common/src/slic.cpp
 )

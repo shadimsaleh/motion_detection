@@ -14,6 +14,7 @@
 #include <motion_detection/flow_neighbour_similarity_calculator.h>
 #include <motion_detection/outlier_detector.h>
 #include <motion_detection/trajectory_visualizer.h>
+#include <motion_detection/motion_logger.h>
 
 class MotionDetectionNode
 {
@@ -62,6 +63,7 @@ class MotionDetectionNode
         bool use_all_frames_;
         bool write_vectors_;
         bool write_trajectories_;
+        bool log_contours_;
         bool include_zeros_;
         int pixel_step_;
         double min_vector_size_;
@@ -83,6 +85,7 @@ class MotionDetectionNode
         BackgroundSubtractor bs_;
         FlowNeighbourSimilarityCalculator fs_;
         OutlierDetector od_;
+        MotionLogger ml_;
 
         cv::VideoWriter output_cap_;
 

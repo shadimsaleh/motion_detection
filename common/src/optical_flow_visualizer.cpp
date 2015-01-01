@@ -193,8 +193,9 @@ void OpticalFlowVisualizer::showFlowOutliers(const cv::Mat &original_image, cv::
     }
 }
 
-void OpticalFlowVisualizer::showClusterContours(const cv::Mat &original_image, cv::Mat &clusters_image, const std::vector<std::vector<cv::Point2f> > &clusters)
+std::vector<std::vector<cv::Point> > OpticalFlowVisualizer::showClusterContours(const cv::Mat &original_image, cv::Mat &clusters_image, const std::vector<std::vector<cv::Point2f> > &clusters)
 {
+    std::vector<std::vector<cv::Point> > contours;
     cv::Scalar colour = CV_RGB(0, 0, 255);
     original_image.copyTo(clusters_image);
     for (int i = 0; i < clusters.size(); i++)
@@ -206,5 +207,26 @@ void OpticalFlowVisualizer::showClusterContours(const cv::Mat &original_image, c
         cv::Mat points_mat(clusteri);
         cv::convexHull(points_mat, hull[0], false);
         cv::drawContours(clusters_image, hull, -1, colour, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
+        contours.push_back(hull[0]);
     }
+    return contours;
+}
+
+std::vector<cv::Rect> OpticalFlowVisualizer::showBoundingBoxes(const cv::Mat &original_image, cv::Mat &clusters_image, const std::vector<std::vector<cv::Point2f> > &clusters)
+{
+    std::vector<cv::Rect> rectangles;
+    cv::Scalar colour = CV_RGB(0, 0, 255);
+    original_image.copyTo(clusters_image);
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        cv::Rect rect;
+        std::vector<cv::Point2f> cluster = clusters.at(i);
+        std::vector<cv::Point> clusteri;
+        cv::Mat(cluster).copyTo(clusteri);
+        cv::Mat points_mat(clusteri);
+        rect = cv::boundingRect(points_mat);
+        rectangles.push_back(rect);
+        cv::rectangle(clusters_image, rect.tl(), rect.br(), colour, 2, 8, 0);
+    }
+    return rectangles;
 }

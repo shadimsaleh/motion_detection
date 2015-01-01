@@ -20,7 +20,6 @@ MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh),
     first_run_ = true;
     nh_.getParam("pixel_step", pixel_step_);
     frame_number_ = 0;
-    trajectory_size_ = 5;
     global_frame_count_ = 0;
     write_trajectories_ = false;
 
@@ -29,6 +28,9 @@ MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh),
     nh_.param<bool>("record_video", record_video_, false);
     nh_.param<bool>("use_all_frames", use_all_frames_, false);
     nh_.param<bool>("write_vectors", write_vectors_, false);
+    nh_.param<bool>("log_contours", log_contours_, false);
+    std::string log_path;
+    nh_.param<std::string>("log_path", log_path, "");
     nh_.param<bool>("include_zeros", include_zeros_, false);
     nh_.param<double>("min_vector_size", min_vector_size_, 1.0);
 
@@ -39,6 +41,11 @@ MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh),
     compensated_flow_publisher_ = it_.advertise("compensated_flow_image", 1);
     clustered_flow_publisher_ = it_.advertise("clustered_flow_image", 1);
     background_subtraction_publisher_ = it_.advertise("background_subtraction_image", 1);
+
+    if (log_contours_)
+    {
+        ml_.setFileName(log_path);
+    }
 
     if (use_pointcloud_)
     {
@@ -219,10 +226,13 @@ void MotionDetectionNode::cloudCallback(const sensor_msgs::PointCloud2 &cloud)
 
 void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
 {
-    global_frame_count_++;
     int skip_frames;
     nh_.param<int>("skip_frames", skip_frames, 1);
-    if (global_frame_count_ % skip_frames != 0) return;
+    int num_motions;
+    nh_.param<int>("num_motions", num_motions, 2);
+    trajectory_size_ = num_motions * 2 + 1;
+
+    if (global_frame_count_ % skip_frames != 0) { global_frame_count_++; return;}
     if (raw_images_.size() < trajectory_size_)
     {
         raw_images_.push_back(image);        
@@ -249,10 +259,14 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
             cv_image = cv_bridge::toCvCopy(*iter, "rgb8");
             if (cv_image->image.cols > 320)
             {
+                /*
                 cv::Rect region(200, 0, cv_image->image.cols - 400, cv_image->image.rows);
                 cv::Mat resized = cv_image->image(region);
                 cv::resize(resized, resized, cv::Size(), 0.5, 0.5);
                 cv_images.push_back(resized);
+                */
+                cv_images.push_back(cv_image->image);
+
             }
             else
             {
@@ -269,8 +283,6 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         std::vector<cv::Point2f> outlier_points;
         double sigma;
         nh_.param<double>("sigma", sigma, 0.5);
-        int num_motions;
-        nh_.param<int>("num_motions", num_motions, 2);
         std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
         trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, num_motions, sigma);
 
@@ -284,7 +296,10 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
 
         cv::Mat cluster_image;
-        ofv_.showClusterContours(cv_images.back(), cluster_image, clusters);
+        std::vector<std::vector<cv::Point> > contours;
+        //contours = ofv_.showClusterContours(cv_images.back(), cluster_image, clusters);        
+        std::vector<cv::Rect> rectangles;
+        rectangles = ofv_.showBoundingBoxes(cv_images.back(), cluster_image, clusters);
         publishImage(cluster_image, clustered_flow_publisher_);
         //detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
         //clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
@@ -304,7 +319,21 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
             writeTrajectories(trajectories, filename);
             cv::imwrite("/home/santosh/workspace/rnd/outlier/frame.jpg", cv_images.back());
         }
+        if (log_contours_)
+        {
+            /*
+            for (int i = 0; i < contours.size(); i++)
+            {
+                ml_.writeContour(contours.at(i), global_frame_count_, i);
+            }
+            */
+            for (int i = 0; i < rectangles.size(); i++)
+            {
+                ml_.writeBoundingBox(rectangles.at(i), global_frame_count_, i);
+            }
+        }
     }
+    global_frame_count_++;
 }
 
 void MotionDetectionNode::run()

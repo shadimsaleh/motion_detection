@@ -17,6 +17,8 @@
         <param name="use_all_frames" type="bool" value="true" />
         <param name="skip_frames" type="int" value="2" />
         <param name="write_vectors" type="bool" value="false" />
+        <param name="log_contours" type="bool" value="true" />
+        <param name="log_path" type="string" value="/home/santosh/workspace/rnd/datasets/moving_camera_one_object/2.log" />
         <!-- include zeros if  you expect no movement -->
         <param name="include_zeros" type="bool" value="false" />
         <param name="min_vector_size" type="double" value="0.2" />
@@ -25,7 +27,7 @@
         <param name="distance_threshold" type="double" value="50.0" />
         <param name="angular_threshold" type="double" value="0.15" />
         <!-- subspace fitting -->
-        <param name="sigma" type="double" value="0.5" />
+        <param name="sigma" type="double" value="1.2" />
         <param name="num_motions" type="int" value="2" />
 
     </node>
