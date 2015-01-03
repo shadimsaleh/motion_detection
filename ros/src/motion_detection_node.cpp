@@ -82,10 +82,9 @@ void MotionDetectionNode::runOpticalFlow(const cv::Mat &image1, const cv::Mat &i
     }
 }
 
-void MotionDetectionNode::runOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, std::vector<std::vector<cv::Point2f> > &trajectories)
+void MotionDetectionNode::runOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, std::vector<std::vector<cv::Point2f> > &trajectories, cv::Mat &optical_flow_image)
 {
     cv::Mat debug_image;
-    cv::Mat optical_flow_image;
 
     optical_flow_vectors = cv::Mat::zeros(images[0].rows, images[0].cols, CV_32FC4);
     int num_vectors = ofc_.calculateOpticalFlowTrajectory(images, optical_flow_vectors, trajectories, pixel_step_, debug_image, min_vector_size_);
@@ -279,7 +278,8 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         //std::vector<std::vector<cv::Vec4d> > clusters;
         std::vector<std::vector<cv::Point2f> > clusters;
         //runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
-        runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories);
+        cv::Mat optical_flow_image;
+        runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories, optical_flow_image);
         std::vector<cv::Point2f> outlier_points;
         double sigma;
         nh_.param<double>("sigma", sigma, 0.5);
@@ -301,6 +301,14 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         std::vector<cv::Rect> rectangles;
         rectangles = ofv_.showBoundingBoxes(cv_images.back(), cluster_image, clusters);
         publishImage(cluster_image, clustered_flow_publisher_);
+
+        cv::Mat combined_image(2 * cluster_image.rows, cluster_image.cols, CV_8UC3);
+        cv::Mat top(combined_image, cv::Rect(0, 0, optical_flow_image.cols, optical_flow_image.rows));
+        optical_flow_image.copyTo(top);
+        cv::Mat bottom(combined_image, cv::Rect(0, optical_flow_image.rows, cluster_image.cols, cluster_image.rows));
+        cluster_image.copyTo(bottom);
+        publishImage(combined_image, compensated_flow_publisher_);
+
         //detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
         //clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
         frame_number_++;
@@ -366,7 +374,8 @@ void MotionDetectionNode::run()
     //std::vector<std::vector<cv::Vec4d> > clusters;
     std::vector<std::vector<cv::Point2f> > clusters;
     //runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
-    runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories);
+    cv::Mat optical_flow_image;
+    runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories, optical_flow_image);
     std::vector<cv::Point2f> outlier_points;
     double residual_threshold;
     nh_.param<double>("residual_threshold", residual_threshold, 0.2);

@@ -33,7 +33,7 @@ class MotionDetectionNode
         void writeVectors(const cv::Mat &flow_vectors, const std::string &filename);
         void writeTrajectories(const std::vector<std::vector<cv::Point2f> > &trajectories, const std::string &filename);
         void runOpticalFlow(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &optical_flow_vectors);
-        void runOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, std::vector<std::vector<cv::Point2f> > &trajectories);
+        void runOpticalFlowTrajectory(const std::vector<cv::Mat> &images, cv::Mat &optical_flow_vectors, std::vector<std::vector<cv::Point2f> > &trajectories, cv::Mat &optical_flow_image);
         void clusterFlow(const cv::Mat &image, const cv::Mat &flow_vectors, std::vector<std::vector<cv::Vec4d> > &clusters);
 
         void detectOutliers(const cv::Mat &original_image, const cv::Mat &optical_flow_vectors, cv::Mat &outlier_mask, bool include_zeros);
