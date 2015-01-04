@@ -192,7 +192,7 @@ void MotionDetectionNode::clusterFlow(const cv::Mat &image, const cv::Mat &flow_
         }
     }
 
-    publishImage(clustered_flow_image, clustered_flow_publisher_);
+    //publishImage(clustered_flow_image, clustered_flow_publisher_);
 }
 
 void MotionDetectionNode::writeVectors(const cv::Mat &flow_vectors, const std::string &filename)
@@ -229,7 +229,8 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
     nh_.param<int>("skip_frames", skip_frames, 1);
     int num_motions;
     nh_.param<int>("num_motions", num_motions, 2);
-    trajectory_size_ = num_motions * 2 + 1;
+//    trajectory_size_ = num_motions * 2 + 1;
+    trajectory_size_ = 2;
 
     if (global_frame_count_ % skip_frames != 0) { global_frame_count_++; return;}
     if (raw_images_.size() < trajectory_size_)
@@ -361,7 +362,7 @@ void MotionDetectionNode::run()
         {
             cv::Mat resized;
             cv::resize(cv_image->image, resized, cv::Size(), 0.5, 0.5);
-            cv_images.push_back(resized);
+            cv_images.push_back(cv_image->image);
         }
         else
         {
@@ -371,20 +372,20 @@ void MotionDetectionNode::run()
     cv::Mat optical_flow_vectors;
     cv::Mat outlier_mask;
     std::vector<std::vector<cv::Point2f> > trajectories;
-    //std::vector<std::vector<cv::Vec4d> > clusters;
-    std::vector<std::vector<cv::Point2f> > clusters;
-    //runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
+    std::vector<std::vector<cv::Vec4d> > clusters;
+    std::vector<std::vector<cv::Point2f> > cluster_points;
+    runOpticalFlow(cv_images[0], cv_images[1], optical_flow_vectors);
     cv::Mat optical_flow_image;
-    runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories, optical_flow_image);
-    std::vector<cv::Point2f> outlier_points;
-    double residual_threshold;
-    nh_.param<double>("residual_threshold", residual_threshold, 0.2);
-    int num_motions;
-    nh_.param<int>("num_motions", num_motions, 2);
-    od_.fitSubspace(trajectories, outlier_points, 2, residual_threshold); 
-    double distance_threshold;
-    nh_.getParam("distance_threshold", distance_threshold);
-    clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
+    //runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories, optical_flow_image);
+    //std::vector<cv::Point2f> outlier_points;
+    //double residual_threshold;
+    //nh_.param<double>("residual_threshold", residual_threshold, 0.2);
+    //int num_motions;
+    //nh_.param<int>("num_motions", num_motions, 2);
+    //od_.fitSubspace(trajectories, outlier_points, 2, residual_threshold); 
+    //double distance_threshold;
+    //nh_.getParam("distance_threshold", distance_threshold);
+    //clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
     /*
     std::cout << "clusters" << clusters.size() << std::endl;
     for (int i = 0; i < clusters.size(); i++)
@@ -397,10 +398,25 @@ void MotionDetectionNode::run()
     }
     */
     cv::Mat cluster_image;
-    ofv_.showClusterContours(cv_images.back(), cluster_image, clusters);
-    publishImage(cluster_image, clustered_flow_publisher_);
+    //ofv_.showClusterContours(cv_images.back(), cluster_image, clusters);
+    //publishImage(cluster_image, clustered_flow_publisher_);
     //detectOutliers(cv_image1->image, optical_flow_vectors, outlier_mask, include_zeros_); 
-    //clusterFlow(cv_image1->image, optical_flow_vectors, clusters);
+    clusterFlow(cv_images[0], optical_flow_vectors, clusters);
+    std::cout << "num clusters: " << clusters.size() << std::endl;
+    for (int i = 0; i < clusters.size(); i++)
+    {
+        std::vector<cv::Vec4d> cluster = clusters.at(i);
+        std::vector<cv::Point2f> cluster_p;
+        for (int j = 0; j < cluster.size(); j++)
+        {
+            cv::Vec4d vec = cluster.at(j);
+            cv::Point2f p(vec[0], vec[1]);
+            cluster_p.push_back(p);
+        }
+        cluster_points.push_back(cluster_p);
+    }
+    ofv_.showBoundingBoxes(cv_images[0], cluster_image, cluster_points);
+    publishImage(cluster_image, clustered_flow_publisher_);
     frame_number_++;
     if (write_vectors_)
     {
@@ -417,6 +433,7 @@ void MotionDetectionNode::run()
         writeTrajectories(trajectories, filename);
         cv::imwrite("/home/santosh/workspace/rnd/outlier/frame.jpg", cv_images.back());
     }
+    image_received_ = false;
     /*
     image_received_ = false;
     frame_number_++;
