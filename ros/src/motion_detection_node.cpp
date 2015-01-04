@@ -42,6 +42,7 @@ class MotionDetectionNode
             clustered_flow_publisher = it_.advertise("clustered_flow_image", 1);
             background_subtraction_publisher = it_.advertise("background_subtraction_image", 1);
 
+            global_frame_count_ = 0;
             if (use_pointcloud)
             {
                 cloud_subscriber = nh_.subscribe("input_pointcloud", 1, &MotionDetectionNode::cloudCallback, this);
@@ -62,6 +63,8 @@ class MotionDetectionNode
                ros::Rate(100).sleep();
                ros::spinOnce();
            }
+           global_frame_count_++;
+           if (global_frame_count_ > 20) return;
            image_received = false;
            cloud_received = false;
            odom_received = false;
@@ -123,11 +126,10 @@ class MotionDetectionNode
            nh_.getParam("angular_threshold", angular_threshold);
 
 
-
 #define BOO
 #ifdef BOO
 
-           cv::Mat compensated_optical_flow_image;
+           cv::Mat compensated_optical_flow_image_;
                
 #endif           
 
@@ -135,14 +137,14 @@ class MotionDetectionNode
            cv::Mat optical_flow_image;
 
            cv::Mat optical_flow_vectors = cv::Mat::zeros(cv_image->image.rows, cv_image->image.cols, CV_32FC4);
-           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step, compensated_optical_flow_image);
+           int num_vectors = ofc.calculateOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors, pixel_step, compensated_optical_flow_image_);
 
 #ifdef BOO
-           cv::cvtColor(compensated_optical_flow_image, compensated_optical_flow_image, CV_GRAY2RGB);
-           cv_bridge::CvImage compensated_flow_image_msg;
-           compensated_flow_image_msg.encoding = sensor_msgs::image_encodings::RGB8;
-           compensated_flow_image_msg.image = compensated_optical_flow_image;
-           compensated_flow_publisher.publish(compensated_flow_image_msg.toImageMsg());
+           cv::cvtColor(compensated_optical_flow_image_, compensated_optical_flow_image_, CV_GRAY2RGB);
+           cv_bridge::CvImage compensated_flow_image_msg_;
+           compensated_flow_image_msg_.encoding = sensor_msgs::image_encodings::RGB8;
+           compensated_flow_image_msg_.image = compensated_optical_flow_image_;
+           //compensated_flow_publisher.publish(compensated_flow_image_msg_.toImageMsg());
 #endif
            
            ofv.showOpticalFlowVectors(cv_image1->image, optical_flow_image, optical_flow_vectors, pixel_step, CV_RGB(0, 0, 255));
@@ -365,6 +367,7 @@ class MotionDetectionNode
         bool use_odom;
         bool use_pointcloud;
         bool record_video;
+        int global_frame_count_;
 
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::ImageConstPtr raw_image1;
