@@ -137,6 +137,7 @@ int OpticalFlowCalculator::calculateOpticalFlowTrajectory(const std::vector<cv::
     // initialize points we want to track
     std::vector<cv::Point2f> points_image1;
     std::vector<cv::Point2f> points_image2;
+    /*
     for (int i = 0; i < images[0].cols; i = i + pixel_step)
     {
         for (int j = 0; j < images[0].rows; j = j + pixel_step)
@@ -147,6 +148,18 @@ int OpticalFlowCalculator::calculateOpticalFlowTrajectory(const std::vector<cv::
             traj.push_back(point);
             init_traj_list.push_back(traj);
         }
+    }
+    */
+
+    cv::Mat gray1;
+    cvtColor(images.at(0), gray1, CV_BGR2GRAY);
+    cv::goodFeaturesToTrack(gray1,points_image1,(images[0].rows * images[0].cols) / 100, 0.01, 10);
+
+    for (int i = 0; i < points_image1.size(); i++)
+    {
+        std::vector<cv::Point2f> traj;
+        traj.push_back(points_image1.at(i));
+        init_traj_list.push_back(traj);
     }
 
     int num_vectors = 0;
@@ -199,6 +212,7 @@ int OpticalFlowCalculator::calculateOpticalFlowTrajectory(const std::vector<cv::
                 if (points_image2.at(i).x > 10.0 && points_image2.at(i).y > 10.0
                     && points_image2.at(i).x < images[0].cols-10 && points_image2.at(i).y < images[0].rows-10)
                 {
+
                     temp.push_back(points_image2.at(i));
                     init_traj_list.at(i).push_back(points_image2.at(i));
                 }
