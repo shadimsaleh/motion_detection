@@ -26,7 +26,7 @@
         <param name="distance_threshold" type="double" value="50.0" />
         <param name="angular_threshold" type="double" value="0.15" />
 
-        <param name="residual_threshold" type="double" value="0.2" />
+        <param name="sigma" type="double" value="8.0" />
         <param name="num_motions" type="int" value="4" />
 
     </node>
@@ -39,15 +39,15 @@
         <remap from="image" to="/motion_detection/optical_flow_image"/>
     </node>
 
-    <!--node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+    <node name="compensated_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/compensated_flow_image"/>
-    </node-->
+    </node>
 
     <node name="clustered_flow_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/clustered_flow_image"/>
     </node>
 
-    <!--node name="background_subtraction_image" pkg="image_view" type="image_view" respawn="false" output="screen">
+    <node name="background_subtraction_image" pkg="image_view" type="image_view" respawn="false" output="screen">
         <remap from="image" to="/motion_detection/background_subtraction_image"/>
-    </node-->
+    </node>
 </launch>

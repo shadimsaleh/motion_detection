@@ -280,20 +280,83 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         //runOpticalFlow(cv_image1->image, cv_image2->image, optical_flow_vectors);
         cv::Mat optical_flow_image;
         runOpticalFlowTrajectory(cv_images, optical_flow_vectors, trajectories, optical_flow_image);
-        std::vector<cv::Point2f> outlier_points;
-        double sigma;
-        nh_.param<double>("sigma", sigma, 0.5);
-        std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
-        trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, num_motions, sigma);
+        if (trajectories.empty())
+        {
+            std::cout << "no trajectories found " << std::endl;
+            cv::Mat cluster_image;
+            cv::Mat trajectory_image;
+            cv::Mat optical_flow_image;
+            cv_images.back().copyTo(cluster_image);
+            cv_images.back().copyTo(trajectory_image);
+            cv_images.back().copyTo(optical_flow_image);
 
-        cv::Mat trajectory_image;
-        tv_.showTrajectories(cv_images.back(), trajectory_image, trajectory_subspace_vectors);
-        // TODO: rename the publisher
-        publishImage(trajectory_image, background_subtraction_publisher_);
+            publishImage(trajectory_image, background_subtraction_publisher_);
+            publishImage(cluster_image, clustered_flow_publisher_);
+            cv::Mat combined_image(2 * cluster_image.rows, cluster_image.cols, CV_8UC3);
+            cv::Mat top(combined_image, cv::Rect(0, 0, optical_flow_image.cols, optical_flow_image.rows));
+            optical_flow_image.copyTo(top);
+            cv::Mat bottom(combined_image, cv::Rect(0, optical_flow_image.rows, cluster_image.cols, cluster_image.rows));
+            cluster_image.copyTo(bottom);
+            publishImage(combined_image, compensated_flow_publisher_);
+            frame_number_++;
+            global_frame_count_++;
+
+            return;
+        }
 
         double distance_threshold;
         nh_.getParam("distance_threshold", distance_threshold);
-        clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
+
+        /*
+        int long_trajectories = 0;
+        for (int i = 0; i < trajectories.size(); i++)
+        {
+            std::vector<cv::Point2f> line = trajectories.at(i);
+            int length = line.size();
+            double traj_length = std::sqrt( (std::pow((line[0].x - line[length-1].x), 2.0) + std::pow((line[0].y - line[length-1].y), 2.0)));
+            if (traj_length > distance_threshold / 5)
+            {
+                long_trajectories++;
+            }
+            else
+            {
+                std::cout << "length: " << traj_length << std::endl;
+            }
+        }
+        std::cout << "long trajectories " << long_trajectories << std::endl;
+        */
+        //if (long_trajectories > (0.5 * cv_images[0].rows * cv_images[0].cols) / (pixel_step_ * pixel_step_))
+        if (true)
+        {
+            std::vector<cv::Point2f> outlier_points;
+            double sigma;
+            nh_.param<double>("sigma", sigma, 0.5);
+            std::vector<std::vector<cv::Point2f> > trajectory_subspace_vectors;
+            trajectory_subspace_vectors = od_.fitSubspace(trajectories, outlier_points, num_motions, sigma);
+
+            cv::Mat trajectory_image;
+            tv_.showTrajectories(cv_images.back(), trajectory_image, trajectory_subspace_vectors);
+            // TODO: rename the publisher
+            publishImage(trajectory_image, background_subtraction_publisher_);
+
+            clusters = fc_.clusterEuclidean(outlier_points, distance_threshold);
+        }
+        else
+        {
+            ROS_INFO("no egomotion");
+            std::vector<cv::Point2f> points;
+            for (int i = 0; i < trajectories.size(); i++)
+            {
+                int length = trajectories.at(i).size();
+                std::vector<cv::Point2f> line = trajectories.at(i);
+                double traj_length = std::sqrt( (std::pow((line[0].x - line[length-1].x), 2.0) + std::pow((line[0].y - line[length-1].y), 2.0)));
+                if (traj_length > distance_threshold / 5)
+                {
+                    points.push_back(trajectories.at(i).at(length - 1));
+                }
+            }
+            clusters = fc_.clusterEuclidean(points, distance_threshold);
+        }
 
         cv::Mat cluster_image;
         std::vector<std::vector<cv::Point> > contours;
