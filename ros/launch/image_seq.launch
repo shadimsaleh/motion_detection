@@ -21,15 +21,15 @@
         <param name="write_vectors" type="bool" value="false" />
         <param name="include_zeros" type="bool" value="true" />
 
-        <param name="log_contours" type="bool" value="false" />
-        <param name="log_path" type="string" value="/home/santosh/workspace/rnd/motion_detection_scripts/compare_areas/0005.log" />
+        <param name="log_contours" type="bool" value="true" />
+        <param name="log_path" type="string" value="/home/santosh/workspace/rnd/motion_detection_scripts/compare_areas/sigma_num_motions/05_2.log" />
         <param name="pixel_step" type="int" value="20" />
         <param name="distance_threshold" type="double" value="90.0" />
         <param name="angular_threshold" type="double" value="0.15" />
         <param name="min_vector_size" type="double" value="1.0" />
         <!-- subspace fitting -->
-        <param name="sigma" type="double" value="8.0" />
-        <param name="num_motions" type="int" value="4" />
+        <param name="sigma" type="double" value="0.5" />
+        <param name="num_motions" type="int" value="2" />
 
     </node>
 

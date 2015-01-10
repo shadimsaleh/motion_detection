@@ -403,6 +403,23 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
                 ml_.writeBoundingBox(rectangles.at(i), global_frame_count_, i);
             }
         }
+        bool save_frames;
+        nh_.param<bool>("save_frames", save_frames, false);
+        if (save_frames)
+        {
+            std::string frames_path;
+            nh_.param<std::string>("frames_path", frames_path, "");
+            if (!frames_path.empty())
+            {
+                if (global_frame_count_ % 5 == 0)
+                {
+                    std::stringstream ss;
+                    ss << global_frame_count_;
+                    cv::cvtColor(combined_image, combined_image, CV_BGR2RGB);
+                    cv::imwrite(frames_path + "frame" + ss.str() + ".jpg", combined_image); 
+                }
+            }
+        }
     }
     global_frame_count_++;
 }
