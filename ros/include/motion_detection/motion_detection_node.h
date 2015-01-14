@@ -69,6 +69,7 @@ class MotionDetectionNode
         double min_vector_size_;
         int trajectory_size_;
         int global_frame_count_;
+        bool egomotion_;
 
         sensor_msgs::PointCloud2 cloud_;
         std::list<sensor_msgs::ImageConstPtr> raw_images_;

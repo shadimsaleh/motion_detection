@@ -29,6 +29,7 @@ MotionDetectionNode::MotionDetectionNode(ros::NodeHandle &nh): nh_(nh), it_(nh),
     nh_.param<bool>("use_all_frames", use_all_frames_, false);
     nh_.param<bool>("write_vectors", write_vectors_, false);
     nh_.param<bool>("log_contours", log_contours_, false);
+    nh_.param<bool>("egomotion", egomotion_, true);
     std::string log_path;
     nh_.param<std::string>("log_path", log_path, "");
     nh_.param<bool>("include_zeros", include_zeros_, false);
@@ -230,6 +231,10 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
     int num_motions;
     nh_.param<int>("num_motions", num_motions, 2);
     trajectory_size_ = num_motions * 2 + 1;
+    if (!egomotion_)
+    {
+        trajectory_size_ = 2;
+    }
 
     if (global_frame_count_ % skip_frames != 0) { global_frame_count_++; return;}
     if (raw_images_.size() < trajectory_size_)
@@ -355,7 +360,24 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
                     points.push_back(trajectories.at(i).at(length - 1));
                 }
             }
-            clusters = fc_.clusterEuclidean(points, distance_threshold);
+            //clusters = fc_.clusterEuclidean(points, distance_threshold);
+            std::vector<std::vector<cv::Vec4d> > cluster_vec;
+            double angular_threshold;
+            nh_.getParam("angular_threshold", angular_threshold);
+            cluster_vec = fc_.getClusters(optical_flow_vectors, pixel_step_, distance_threshold, angular_threshold);
+            for (int i = 0; i < cluster_vec.size(); i++)
+            {
+                std::vector<cv::Point2f> cc;
+                std::vector<cv::Vec4d> cc_v = cluster_vec.at(i);
+                for (int j = 0; j < cc_v.size(); j++)
+                {
+                    cv::Point2f point(cc_v.at(j)[0], cc_v.at(j)[1]);
+                    cc.push_back(point);
+                }
+                clusters.push_back(cc);
+            }
+            std::cout << "clusters size " << clusters.size() << std::endl;
+            std::cout << "clusters  vecsize " << cluster_vec.size() << std::endl;
         }
 
         cv::Mat cluster_image;

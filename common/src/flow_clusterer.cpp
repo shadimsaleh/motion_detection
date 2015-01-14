@@ -108,6 +108,7 @@ std::vector<cv::Point2f> FlowClusterer::getClustersCenters(const cv::Mat &flow_v
 
 std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &flow_vectors, int pixel_step, double distance_threshold, double angular_threshold)
 {
+#ifdef NEW_THING 
     std::vector<VectorCluster> clusters;
     for (int i = 0; i < flow_vectors.rows; i = i + pixel_step) 
     {
@@ -165,6 +166,58 @@ std::vector<std::vector<cv::Vec4d> > FlowClusterer::getClusters(const cv::Mat &f
     }
     */
     return mat_clusters;
+#endif
+    int count = 0;
+    std::vector<VectorCluster> clusters;
+    for (int i = 0; i < flow_vectors.rows; i = i + pixel_step)
+    {
+        for (int j = 0; j < flow_vectors.cols; j = j + pixel_step)
+        {
+            cv::Vec4d vec = flow_vectors.at<cv::Vec4d>(i, j);
+            if (std::abs(vec[2]) > 0.0 || std::abs(vec[3]) > 0.0)
+            {
+                count++;
+                bool added = false;
+                for (int k = 0; k < clusters.size(); k++)
+                {
+                    if (clusters.at(k).getClosestDistance(vec) < distance_threshold && 
+                        clusters.at(k).getClosestOrientation(vec) < angular_threshold)
+                    {
+                        clusters.at(k).addVector(vec);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added)
+                {
+                    VectorCluster vc;
+                    vc.addVector(vec);
+                    clusters.push_back(vc);
+                }
+            }
+        }
+    }
+    std::vector<std::vector<cv::Vec4d> > mat_clusters;    
+    //std::cout << "clusters_zero: " << std::endl;
+    for (int i = 0; i < clusters.size(); i++)
+    {
+//        cv::Mat cluster_points(clusters.at(i).getCluster(), true);
+        if (clusters.at(i).size() > 5)
+        {
+            //mat_clusters.push_back(clusters.at(i).getMeanVector());
+            mat_clusters.push_back(clusters.at(i).getCluster());
+        }
+    }
+    /*
+    std::cout << "clusters_first: " << std::endl;
+    for (int i = 0; i < mat_clusters.size(); i++)
+    {
+        std::cout << mat_clusters.at(i) << std::endl;
+    }
+    */
+    std::cout << "num vectors: " << count << std::endl;
+    return mat_clusters; 
+
 }
 
 std::vector<std::vector<cv::Point2f>> FlowClusterer::clusterEuclidean(const std::vector<cv::Point2f> &points, double distance_threshold)
