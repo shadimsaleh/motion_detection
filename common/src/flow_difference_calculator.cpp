@@ -1,3 +1,11 @@
+/* flow_difference_calculator.cpp
+ *
+ * Copyright (C) 2014 Santosh Thoduka
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <motion_detection/flow_difference_calculator.h>
 #include <iostream>
 

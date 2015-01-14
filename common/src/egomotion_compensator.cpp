@@ -1,3 +1,11 @@
+/* egomotion_compensator.cpp
+ *
+ * Copyright (C) 2014 Santosh Thoduka
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <motion_detection/egomotion_compensator.h>
 
 EgomotionCompensator::EgomotionCompensator()

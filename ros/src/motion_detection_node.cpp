@@ -1,3 +1,11 @@
+/* motion_detection_node.cpp
+ *
+ * Copyright (C) 2014 Santosh Thoduka
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE file for details.
+ */
+
 #include <motion_detection/motion_detection_node.h>
 #include <sensor_msgs/image_encodings.h>
 #include <pcl_conversions/pcl_conversions.h>
