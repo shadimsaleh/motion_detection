@@ -339,7 +339,7 @@ void MotionDetectionNode::imageCallback(const sensor_msgs::ImageConstPtr &image)
         std::cout << "long trajectories " << long_trajectories << std::endl;
         */
         //if (long_trajectories > (0.5 * cv_images[0].rows * cv_images[0].cols) / (pixel_step_ * pixel_step_))
-        if (true)
+        if (egomotion_)
         {
             std::vector<cv::Point2f> outlier_points;
             double sigma;
